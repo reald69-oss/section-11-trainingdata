@@ -4,6 +4,11 @@ Intervals.icu → GitHub/Local JSON Export
 Exports training data for LLM access.
 Supports both automated GitHub sync and manual local export.
 
+Version 3.5.1 - HRV Outlier Filter
+  - Add _is_valid_hrv() helper to filter sensor errors (10-250ms range)
+  - Applied to: baselines (7d/28d), Recovery Index, persistence counts, summaries
+  - Fixes false alarms from sensor glitches (e.g., 255ms Amazfit/Garmin errors)
+
 Version 3.5.0 - Race Calendar & Race-Week Protocol
   - 90-day race calendar from Intervals.icu RACE_A/B/C event categories
   - Three-layer race awareness: calendar (D-90), taper onset (D-14 to D-8), race week (D-7 to D-0)
@@ -42,7 +47,7 @@ class IntervalsSync:
     HISTORY_FILE = "history.json"
     UPSTREAM_REPO = "CrankAddict/section-11"
     CHANGELOG_FILE = "changelog.json"
-    VERSION = "3.5.0"
+    VERSION = "3.5.1"
 
     # Sport family mapping for per-sport monotony calculation
     # Multi-sport athletes get inflated total monotony when cross-training
@@ -632,14 +637,14 @@ class IntervalsSync:
         strain = round(tss_7d_total * monotony, 0) if monotony else None
         
         # === BASELINES (7-day and extended) ===
-        hrv_values_7d = [w.get("hrv") for w in wellness_7d if w.get("hrv")]
+        hrv_values_7d = [w.get("hrv") for w in wellness_7d if self._is_valid_hrv(w.get("hrv"))]
         rhr_values_7d = [w.get("restingHR") for w in wellness_7d if w.get("restingHR")]
         
         hrv_baseline_7d = round(statistics.mean(hrv_values_7d), 1) if hrv_values_7d else None
         rhr_baseline_7d = round(statistics.mean(rhr_values_7d), 1) if rhr_values_7d else None
         
         # Extended baselines (for more stable reference)
-        hrv_values_ext = [w.get("hrv") for w in wellness_extended if w.get("hrv")]
+        hrv_values_ext = [w.get("hrv") for w in wellness_extended if self._is_valid_hrv(w.get("hrv"))]
         rhr_values_ext = [w.get("restingHR") for w in wellness_extended if w.get("restingHR")]
         
         hrv_baseline_28d = round(statistics.mean(hrv_values_ext), 1) if hrv_values_ext else None
@@ -648,7 +653,8 @@ class IntervalsSync:
         # === RECOVERY INDEX (RI) ===
         # Formula: (HRV_today / HRV_baseline) ÷ (RHR_today / RHR_baseline)
         # Interpretation: >1.0 = good recovery, <1.0 = poor recovery
-        latest_hrv = wellness_7d[-1].get("hrv") if wellness_7d else None
+        latest_hrv_raw = wellness_7d[-1].get("hrv") if wellness_7d else None
+        latest_hrv = latest_hrv_raw if self._is_valid_hrv(latest_hrv_raw) else None
         latest_rhr = wellness_7d[-1].get("restingHR") if wellness_7d else None
         
         if latest_hrv and latest_rhr and hrv_baseline_7d and rhr_baseline_7d:
@@ -1851,14 +1857,22 @@ class IntervalsSync:
             return f"deload pattern detected (7-day TSS {round(tss_7d_total)} is {round(deficit_pct)}% below 28-day weekly avg {round(weekly_avg_28d)})"
         
         return None
-    
+
+    @staticmethod
+    def _is_valid_hrv(value: float) -> bool:
+        """
+        Check if HRV value is within valid physiological range (10-250ms RMSSD).
+        Filters sensor errors while preserving legitimate high values in elite athletes.
+        """
+        return value is not None and 10 <= value <= 250
+
     def _count_hrv_low_days(self, wellness_7d: List[Dict], baseline: float) -> int:
         """Count consecutive days (from most recent) where HRV is ↓>20% below baseline"""
         threshold = baseline * 0.8
         count = 0
         for w in reversed(wellness_7d):
             hrv = w.get("hrv")
-            if hrv is not None and hrv < threshold:
+            if self._is_valid_hrv(hrv) and hrv < threshold:
                 count += 1
             else:
                 break
@@ -2229,8 +2243,8 @@ class IntervalsSync:
                 week_tss += day_tss
                 week_seconds += day_seconds
                 week_activities += len(day_activities)
-                
-                if wellness.get("hrv"):
+
+                if self._is_valid_hrv(wellness.get("hrv")):
                     week_hrv.append(wellness["hrv"])
                 if wellness.get("restingHR"):
                     week_rhr.append(wellness["restingHR"])
@@ -2371,8 +2385,9 @@ class IntervalsSync:
                 month_tss += day_tss
                 month_seconds += day_seconds
                 month_activities += len(day_activities)
-                
-                if wellness.get("hrv"):
+
+
+                if self._is_valid_hrv(wellness.get("hrv")):
                     month_hrv.append(wellness["hrv"])
                 if wellness.get("restingHR"):
                     month_rhr.append(wellness["restingHR"])
@@ -3218,15 +3233,15 @@ class IntervalsSync:
         total_tss = sum(act.get("icu_training_load", 0) for act in activities if act.get("icu_training_load"))
         total_seconds = sum(act.get("moving_time", 0) for act in activities)
         total_hours = total_seconds / 3600
-        
+
         avg_hrv = None
         avg_rhr = None
         if wellness:
-            hrv_values = [w.get("hrv") for w in wellness if w.get("hrv")]
+            hrv_values = [w.get("hrv") for w in wellness if self._is_valid_hrv(w.get("hrv"))]
             rhr_values = [w.get("restingHR") for w in wellness if w.get("restingHR")]
             avg_hrv = round(sum(hrv_values) / len(hrv_values), 1) if hrv_values else None
             avg_rhr = round(sum(rhr_values) / len(rhr_values), 1) if rhr_values else None
-        
+
         return {
             "total_training_hours": round(total_hours, 2),
             "total_tss": round(total_tss, 0),
@@ -3327,497 +3342,6 @@ class IntervalsSync:
             json.dump(data, f, indent=2, default=str)
         print(f"Data saved to {filepath}")
         return filepath
-
-    def generate_markdown_report(self, data: Dict) -> str:
-        """Generate a Section 11-compliant markdown report from the data dict."""
-        import re as _re
-
-        cs   = data.get("current_status", {}) or {}
-        ct   = cs.get("cycling_thresholds", {}) or {}
-        rt   = cs.get("running_thresholds", {}) or {}
-        fit  = cs.get("fitness", {}) or {}
-        cm   = cs.get("current_metrics", {}) or {}
-        dm   = data.get("derived_metrics", {}) or {}
-        meta = data.get("metadata", {}) or {}
-        well = data.get("wellness_data", []) or []
-        plan = data.get("planned_workouts", []) or []
-        ws   = data.get("weekly_summary", {}) or {}
-        rc   = data.get("race_calendar", {}) or {}
-        cap  = dm.get("capability", {}) or {}
-        dur  = cap.get("durability", {}) or {}
-        tidc = cap.get("tid_comparison", {}) or {}
-        tid7   = dm.get("seiler_tid_7d", {}) or {}
-        tid28  = dm.get("seiler_tid_28d", {}) or {}
-        tidP7  = dm.get("seiler_tid_7d_primary", {}) or {}
-        tidP28 = dm.get("seiler_tid_28d_primary", {}) or {}
-        byType = (data.get("summary") or {}).get("by_activity_type", {}) or {}
-        cons = dm.get("consistency_details", {}) or {}
-        zd   = dm.get("zone_distribution_7d", {}) or {}
-        dq   = dm.get("data_quality", {}) or {}
-        bo   = dm.get("benchmark_outdoor", {}) or {}
-        bi   = dm.get("benchmark_indoor", {}) or {}
-        alerts = data.get("alerts", []) or []
-        hist   = data.get("history", {}) or {}
-
-        def v(x, suf=""):
-            return "N/A" if x is None else f"{x}{suf}"
-
-        def pct(x):
-            return "N/A" if x is None else f"{x}%"
-
-        def secs2hm(s):
-            if not s: return "0m"
-            h, m = int(s // 3600), int((s % 3600) // 60)
-            return f"{h}h {m}m" if h > 0 else f"{m}m"
-
-        hrv_vals   = [w["hrv_rmssd"] for w in well if w.get("hrv_rmssd")]
-        rhr_vals   = [w["resting_hr"] for w in well if w.get("resting_hr")]
-        sleep_vals = [w["sleep_hours"] for w in well if w.get("sleep_hours")]
-        sq_vals    = [w["sleep_quality"] for w in well if w.get("sleep_quality")]
-
-        hrv_avg   = round(sum(hrv_vals) / len(hrv_vals), 1) if hrv_vals else None
-        hrv_min   = min(hrv_vals) if hrv_vals else None
-        hrv_max   = max(hrv_vals) if hrv_vals else None
-        rhr_avg   = round(sum(rhr_vals) / len(rhr_vals), 1) if rhr_vals else None
-        rhr_min   = min(rhr_vals) if rhr_vals else None
-        rhr_max   = max(rhr_vals) if rhr_vals else None
-        sleep_avg = round(sum(sleep_vals) / len(sleep_vals), 1) if sleep_vals else None
-        sq_avg    = round(sum(sq_vals) / len(sq_vals), 1) if sq_vals else None
-
-        hrv_now  = cm.get("hrv")
-        hrv_base = dm.get("hrv_baseline_7d")
-        rhr_now  = cm.get("resting_hr")
-        rhr_base = dm.get("rhr_baseline_7d")
-
-        if hrv_now and hrv_base:
-            ratio = hrv_now / hrv_base
-            hrv_trend = "→ stable" if ratio >= 0.97 else ("↓ slightly below baseline" if ratio >= 0.90 else "↓ suppressed — monitor")
-        else:
-            hrv_trend = "→"
-
-        if rhr_now and rhr_base:
-            ratio = rhr_now / rhr_base
-            rhr_trend = "→ stable" if ratio <= 1.03 else ("↑ slightly elevated" if ratio <= 1.07 else "↑ elevated — monitor")
-        else:
-            rhr_trend = "→"
-
-        phase_triggers = ", ".join(dm.get("phase_triggers", []) or [])
-        generated = meta.get("last_updated", "")[:10]
-        period = (data.get("summary") or {}).get("period_description", "Last 7 days")
-
-        lines = []
-        A = lines.append
-
-        A(f"# Training Analysis Report")
-        A(f"**Generated:** {generated}  |  **sync.py v{meta.get('version', 'N/A')}**  |  **Data range:** {period}")
-        A("")
-        A("---")
-        A("")
-
-        # SECTION 1
-        A("## Section 1: Executive Summary")
-        A("")
-        A(f"**Phase Detected:** {v(dm.get('phase_detected'))}  ({phase_triggers})")
-        A(f"**Seasonal Context:** {v(dm.get('seasonal_context'))}")
-        A(f"**ACWR:** {v(dm.get('acwr'))}  —  {v(dm.get('acwr_interpretation'))}")
-        A(f"**Recovery Index:** {v(dm.get('recovery_index'))}")
-        A(f"**TSB (Form):** {v(fit.get('tsb'))}")
-        if not alerts:
-            A("**Alerts:** No alerts — green light")
-        else:
-            A("**Alerts:**")
-            for a in alerts:
-                A(f"- [{a.get('severity','').upper()}] {a.get('metric','')}: {a.get('context','')}")
-        A("")
-        A("**Summary:**")
-        A(f"The athlete is in a {v(dm.get('phase_detected'))} phase during the {v(dm.get('seasonal_context'))} period. "
-          f"ACWR of {v(dm.get('acwr'))} is {v(dm.get('acwr_interpretation'))}, with TSB of {v(fit.get('tsb'))} indicating "
-          f"positive form. Primary sport is {v(dm.get('primary_sport'))} ({v(dm.get('primary_sport_tss_7d'))} TSS over 7 days) "
-          f"with multi-sport training detected across {len(byType)} disciplines.")
-        A("")
-        A("**Coach Feedback:**")
-        if not alerts:
-            A("No active alerts. Athlete is within all recommended thresholds. Green light to proceed with scheduled training.")
-        else:
-            for a in alerts:
-                A(f"- [{a.get('severity','').upper()}] {a.get('metric','')}: {a.get('context','')}")
-        A("")
-        A("---")
-        A("")
-
-        # SECTION 2
-        A("## Section 2: Training Load Overview")
-        A("")
-        A(f"**CTL (Fitness):** {v(fit.get('ctl'))}")
-        A(f"**ATL (Fatigue):** {v(fit.get('atl'))}")
-        A(f"**TSB (Form):** {v(fit.get('tsb'))}")
-        A(f"**Ramp Rate:** {v(fit.get('ramp_rate'))} CTL/wk")
-        A(f"**TSS 7d:** {v(dm.get('tss_7d_total'))}")
-        A(f"**TSS 28d:** {v(dm.get('tss_28d_total'))}")
-        A(f"**ACWR:** {v(dm.get('acwr'))}  —  {v(dm.get('acwr_interpretation'))}")
-        A(f"**Monotony:** {v(dm.get('monotony'))}  —  {v(dm.get('monotony_interpretation'))}")
-        A(f"**Effective Monotony:** {v(dm.get('effective_monotony'))} (primary sport only)")
-        A(f"**Strain:** {v(dm.get('strain'))}")
-        A(f"**Stress Tolerance:** {v(dm.get('stress_tolerance'))}")
-        A(f"**Load-Recovery Ratio:** {v(dm.get('load_recovery_ratio'))}")
-        A(f"**Hard Days This Week:** {v(dm.get('hard_days_this_week'))}")
-        A(f"**Fitness Source:** {v(fit.get('fitness_source'))}")
-        A("")
-        A("---")
-        A("")
-
-        # SECTION 3
-        A("## Section 3: Distribution by Activity Type")
-        A("")
-        for sport, sv in byType.items():
-            A(f"- **{sport}:** {sv['count']} sessions  |  {v(sv.get('distance_km'), ' km')}  |  {v(sv.get('duration_decimal_hours'), 'h')}  |  TSS {sv.get('tss', 'N/A')}")
-        A("")
-        A(f"**Total:** {ws.get('activities_count')} sessions  |  {v(ws.get('total_training_hours'), 'h')}  |  TSS {ws.get('total_tss')}")
-        A(f"**Avg HRV (7d):** {v(ws.get('avg_hrv'))}  |  **Avg RHR (7d):** {v(ws.get('avg_resting_hr'), ' bpm')}")
-        A("")
-        A("---")
-        A("")
-
-        # SECTION 4
-        A("## Section 4: Intensity Distribution")
-        A("")
-        A(f"**Polarisation Index:** {v(dm.get('polarisation_index'))}  (target ~0.80)")
-        A(f"**Grey Zone %:** {pct(dm.get('grey_zone_percentage'))}  (target <5%)")
-        A(f"**Quality Intensity %:** {pct(dm.get('quality_intensity_percentage'))}  (target ~20%)")
-        A(f"**Zone Distribution 7d:** Z1: {v(zd.get('z1_hours'), 'h')}  Z2: {v(zd.get('z2_hours'), 'h')}  Z3: {v(zd.get('z3_hours'), 'h')}  Z4+: {v(zd.get('z4_plus_hours'), 'h')}  Total: {v(zd.get('total_hours'), 'h')}")
-        A("")
-        A(f"**Seiler TID 7d (All Sports):** {v(tid7.get('classification'))}  PI: {v(tid7.get('polarization_index'))}")
-        A(f"  Z1: {pct(tid7.get('z1_pct'))} ({secs2hm(tid7.get('z1_seconds'))})  Z2: {pct(tid7.get('z2_pct'))} ({secs2hm(tid7.get('z2_seconds'))})  Z3: {pct(tid7.get('z3_pct'))} ({secs2hm(tid7.get('z3_seconds'))})")
-        A("")
-        A(f"**Seiler TID 28d (All Sports):** {v(tid28.get('classification'))}  PI: {v(tid28.get('polarization_index'))}")
-        A(f"  Z1: {pct(tid28.get('z1_pct'))} ({secs2hm(tid28.get('z1_seconds'))})  Z2: {pct(tid28.get('z2_pct'))} ({secs2hm(tid28.get('z2_seconds'))})  Z3: {pct(tid28.get('z3_pct'))} ({secs2hm(tid28.get('z3_seconds'))})")
-        A("")
-        sp7 = (tidP7.get("sport") or "run").upper()
-        A(f"**Seiler TID 7d ({sp7} Primary):** {v(tidP7.get('classification'))}  PI: {v(tidP7.get('polarization_index'))}")
-        A(f"  Z1: {pct(tidP7.get('z1_pct'))} ({secs2hm(tidP7.get('z1_seconds'))})  Z2: {pct(tidP7.get('z2_pct'))} ({secs2hm(tidP7.get('z2_seconds'))})  Z3: {pct(tidP7.get('z3_pct'))} ({secs2hm(tidP7.get('z3_seconds'))})")
-        A("")
-        sp28 = (tidP28.get("sport") or sp7).upper()
-        A(f"**Seiler TID 28d ({sp28} Primary):** {v(tidP28.get('classification'))}  PI: {v(tidP28.get('polarization_index'))}")
-        A(f"  Z1: {pct(tidP28.get('z1_pct'))} ({secs2hm(tidP28.get('z1_seconds'))})  Z2: {pct(tidP28.get('z2_pct'))} ({secs2hm(tidP28.get('z2_seconds'))})  Z3: {pct(tidP28.get('z3_pct'))} ({secs2hm(tidP28.get('z3_seconds'))})")
-        A("")
-        A("---")
-        A("")
-
-        # SECTION 5
-        A("## Section 5: Fitness & Performance Markers")
-        A("")
-        A("### 5.1 Current Capacity — Cycling")
-        A("")
-        A(f"- **Outdoor FTP:** {v(ct.get('ftp_outdoor'), ' W')}")
-        A(f"- **Indoor FTP:** {v(ct.get('ftp_indoor'), ' W')}")
-        A(f"- **eFTP:** {v(ct.get('eftp'), ' W')}")
-        A(f"- **W':** {v(ct.get('w_prime_kj'), ' kJ')}  ({v(ct.get('w_prime'), ' J')})")
-        A(f"- **LTHR:** {v(ct.get('lthr'), ' bpm')}")
-        A(f"- **Max HR:** {v(ct.get('max_hr'), ' bpm')}")
-        A("")
-        A("### 5.1 Current Capacity — Running")
-        A("")
-        A(f"- **Outdoor FTP:** {v(rt.get('ftp_outdoor'), ' W')}")
-        A(f"- **eFTP:** {v(rt.get('eftp'), ' W')}")
-        A(f"- **Threshold Pace:** {v(rt.get('threshold_pace_min_per_km'))}")
-        A(f"- **LTHR:** {v(rt.get('lthr'), ' bpm')}")
-        A(f"- **Max HR:** {v(rt.get('max_hr'), ' bpm')}")
-        A("")
-        A("### 5.2 Additional Performance Markers")
-        A("")
-        A(f"- **VO2max:** {v(dm.get('vo2max'), ' mL/kg/min')}")
-        A(f"- **P-max:** {v(dm.get('p_max'), ' W')}")
-        A(f"- **Power Model:** {v(dm.get('power_model_source'))}")
-        if bo.get("benchmark_percentage") is None:
-            A("- **Benchmark (Outdoor):** N/A — insufficient history (need 8+ weeks)")
-        else:
-            A(f"- **Benchmark (Outdoor):** {bo['benchmark_percentage']}  ({v(bo.get('ftp_8_weeks_ago'), 'W')} → {v(bo.get('current_ftp'), 'W')})")
-        if bi.get("benchmark_percentage") is None:
-            A("- **Benchmark (Indoor):** N/A — no indoor FTP set")
-        else:
-            A(f"- **Benchmark (Indoor):** {bi['benchmark_percentage']}  ({v(bi.get('ftp_8_weeks_ago'), 'W')} → {v(bi.get('current_ftp'), 'W')})")
-        A("")
-        A("### 5.2 Interpretation")
-        A("")
-        ftp_out = ct.get("ftp_outdoor")
-        eftp_c  = ct.get("eftp")
-        align = (f"eFTP is {abs(round(eftp_c - ftp_out, 1))}W {'above' if eftp_c >= ftp_out else 'below'} set FTP"
-                 if ftp_out and eftp_c else "eFTP alignment N/A")
-        A(f"**Cycling:** {align}. W' of {v(ct.get('w_prime_kj'), ' kJ')} indicates available anaerobic capacity. "
-          f"LTHR {v(ct.get('lthr'), ' bpm')} / Max HR {v(ct.get('max_hr'), ' bpm')}.")
-        A("")
-        ftp_run = rt.get("ftp_outdoor")
-        eftp_r  = rt.get("eftp")
-        lthr_r  = rt.get("lthr")
-        lthr_c  = ct.get("lthr")
-        align_r = (f"eFTP is {abs(round(eftp_r - ftp_run, 1))}W {'above' if eftp_r >= ftp_run else 'below'} set FTP"
-                   if ftp_run and eftp_r else "eFTP alignment N/A")
-        lthr_note = ""
-        if lthr_r and lthr_c:
-            if lthr_r == lthr_c:    lthr_note = " LTHR identical across sports — verify this is intentional."
-            elif lthr_r > lthr_c:   lthr_note = " Running LTHR higher — consistent with sport-specific demand."
-            else:                   lthr_note = " Running LTHR lower than cycling — review sport settings."
-        A(f"**Running:** {align_r}. Threshold pace {v(rt.get('threshold_pace_min_per_km'))} aligns with set power threshold. "
-          f"LTHR {v(rt.get('lthr'), ' bpm')} / Max HR {v(rt.get('max_hr'), ' bpm')}.{lthr_note}")
-        A("")
-        A("---")
-        A("")
-
-        # SECTION 6
-        A("## Section 6: Durability & Capability Metrics")
-        A("")
-        A("**Aggregate Durability:**")
-        A(f"- 7d mean: {v(dur.get('mean_decoupling_7d'), '%')}  ({v(dur.get('qualifying_sessions_7d'))} qualifying sessions)")
-        A(f"- 28d mean: {v(dur.get('mean_decoupling_28d'), '%')}  ({v(dur.get('qualifying_sessions_28d'))} qualifying sessions)")
-        A(f"- Trend: {v(dur.get('trend'))}")
-        A(f"- High drift 7d: {v(dur.get('high_drift_count_7d'))} sessions  |  High drift 28d: {v(dur.get('high_drift_count_28d'))} sessions")
-        A(f"- Note: {v(dur.get('note'))}")
-        A("")
-        A("**TID Comparison (Capability):**")
-        A(f"- Classification 7d: {v(tidc.get('classification_7d'))}")
-        A(f"- Classification 28d: {v(tidc.get('classification_28d'))}")
-        A(f"- PI 7d: {v(tidc.get('pi_7d'))}  |  PI 28d: {v(tidc.get('pi_28d'))}  |  PI Delta: {v(tidc.get('pi_delta'))}")
-        A(f"- Drift: {v(tidc.get('drift'))}")
-        A(f"- Note: {v(tidc.get('note'))}")
-        A("")
-        A("---")
-        A("")
-
-        # SECTION 7
-        A("## Section 7: Recovery & Wellness")
-        A("")
-        A("**Current (Today):**")
-        A(f"- HRV: {v(hrv_now)}  (7d baseline: {v(hrv_base)}  |  28d baseline: {v(dm.get('hrv_baseline_28d'))})")
-        A(f"- RHR: {v(rhr_now, ' bpm')}  (7d baseline: {v(rhr_base, ' bpm')}  |  28d baseline: {v(dm.get('rhr_baseline_28d'), ' bpm')})")
-        A(f"- Sleep: {v(cm.get('sleep_hours'), ' h')}  |  Quality: {v(cm.get('sleep_quality'))}")
-        A(f"- Weight: {v(cm.get('weight_kg'), ' kg')}")
-        A(f"- Recovery Index: {v(dm.get('recovery_index'))}")
-        A("")
-        A("**7-Day Wellness Trends:**")
-        A(f"- HRV: {hrv_min}–{hrv_max} ms (avg {hrv_avg}, baseline {v(hrv_base)}) {hrv_trend}")
-        A(f"- RHR: {rhr_min}–{rhr_max} bpm (avg {rhr_avg}, baseline {v(rhr_base)}) {rhr_trend}")
-        A(f"- Sleep: {sleep_avg}h avg, quality {sq_avg}/4 avg")
-        A("")
-        A("---")
-        A("")
-
-        # SECTION 8
-        A("## Section 8: Consistency & Execution")
-        A("")
-        A(f"**Consistency Index:** {v(dm.get('consistency_index'))}  ({v(cons.get('matched_days'))} of {v(cons.get('planned_days'))} planned days completed)")
-        A(f"**Planned Days:** {v(cons.get('planned_days'))}")
-        A(f"**Completed Days:** {v(cons.get('completed_days'))}")
-        A(f"**Planned Dates:** {', '.join(cons.get('planned_dates') or [])}")
-        A(f"**Completed Dates:** {', '.join(cons.get('completed_dates') or [])}")
-        A(f"**Planned Workouts 7d:** {v(dq.get('planned_workouts_7d'))}")
-        A(f"**Activities 7d:** {v(dq.get('activities_7d'))}")
-        A(f"**Activities 28d:** {v(dq.get('activities_28d'))}")
-        indoor_days  = (dq.get("ftp_history_days") or {}).get("indoor")
-        outdoor_days = (dq.get("ftp_history_days") or {}).get("outdoor")
-        A(f"**FTP History:** Indoor: {v(indoor_days, ' days')}  |  Outdoor: {v(outdoor_days, ' days')}")
-        A(f"**History Confidence:** {v(hist.get('history_confidence'))}  ({v(hist.get('total_months'))} months)")
-        A("")
-        A("---")
-        A("")
-
-        # SECTION 9
-        A("## Section 9: Planned Workouts")
-        A("")
-        if plan:
-            for e in plan:
-                A(f"**{e['date'][:10]}  {e.get('name', 'Workout')}**  |  TSS: {v(e.get('planned_tss'))}")
-                desc = (e.get("description") or "").strip()
-                if desc:
-                    for line in desc.split("\n"):
-                        if line.strip():
-                            A(f"  {line.strip()}")
-                A("")
-        else:
-            A("No planned workouts in the next 42 days.")
-            A("")
-        A("**Race Calendar:**")
-        nr = rc.get("next_race")
-        race_kw = _re.compile(r"\brace\b|\bhalf.?marathon\b|\b21\.1\b|\bmarathon\b|\btriathlon\b|\bironman\b|\b10k\b|\b5k\b", _re.IGNORECASE)
-        workout_races = [e for e in plan if race_kw.search(e.get("description", "") or "") or race_kw.search(e.get("name", "") or "")]
-        if nr:
-            A(f"- Next Race: {nr['name']}  —  {nr['date']}  ({nr['days_until']} days)")
-        elif workout_races:
-            A("- Next Race: Detected in planned workouts (not logged as race event in Intervals.icu):")
-            for wr in workout_races:
-                desc_w = (wr.get("description") or "").strip().replace("\n", " ")
-                A(f"  - {wr['date'][:10]}  {desc_w}  |  TSS: {v(wr.get('planned_tss'))}")
-            A("- **Note:** Log this as a RACE event in Intervals.icu for taper/race-week protocol to activate.")
-        else:
-            A("- Next Race: No races in 90-day window")
-        rw = rc.get("race_week", {})
-        A(f"- Race Week: {'ACTIVE: ' + str(rw.get('event_name', '')) if rw.get('active') else 'Not active'}")
-        ta = rc.get("taper_alert", {})
-        A(f"- Taper Alert: {'ACTIVE: ' + str(ta.get('days_until', '')) + ' days to race' if ta.get('active') else 'Not active'}")
-        A("")
-        A("---")
-        A("")
-
-        # SECTION 10
-        A("## Section 10: Risk Assessment")
-        A("")
-        acwr   = dm.get("acwr")
-        ramp   = fit.get("ramp_rate")
-        mono   = dm.get("monotony")
-        dec_28 = dur.get("mean_decoupling_28d")
-        ci     = dm.get("consistency_index")
-        ri     = dm.get("recovery_index")
-
-        acwr_note = ("ELEVATED (>1.3)" if acwr and acwr > 1.3
-                     else "MONITOR (approaching 1.3)" if acwr and acwr > 1.2
-                     else "LOW — within optimal range")
-        mono_note = "ELEVATED (>2.0)" if mono and mono > 2.0 else "NORMAL"
-        ramp_note = ("ELEVATED (>+5)" if ramp and ramp > 5
-                     else "DETRAINING (<-8)" if ramp and ramp < -8
-                     else "OK")
-        hrv_r_note = ("SUPPRESSED (>10% below baseline)"
-                      if hrv_now and hrv_base and hrv_now < hrv_base * 0.90 else "OK")
-        dur_note = "ELEVATED (>5%)" if dec_28 and dec_28 > 5 else "LOW"
-        ci_note  = "LOW ADHERENCE (<0.5)" if ci and ci < 0.5 else "OK"
-
-        A(f"- **Overreaching Risk (ACWR):** {acwr}  —  {acwr_note}")
-        A(f"- **Monotony Risk:** {mono}  —  {mono_note}")
-        A(f"- **Ramp Rate Risk:** {ramp} CTL/wk  —  {ramp_note}")
-        A(f"- **HRV Suppression:** {hrv_now} vs baseline {hrv_base}  —  {hrv_r_note}")
-        A(f"- **Durability Risk:** 28d mean {v(dec_28, '%')}  —  {dur_note}")
-        A(f"- **Consistency:** {ci}  —  {ci_note}")
-        if not alerts:
-            A("- **Active Alerts:** None")
-        else:
-            A("- **Active Alerts:**")
-            for a in alerts:
-                A(f"  - [{a.get('severity', '').upper()}] {a.get('metric', '')}")
-        A("")
-        A("---")
-        A("")
-
-        # SECTION 11
-        A("## Section 11: Coaching Recommendations")
-        A("")
-        ramp_rec = ("Load progression appropriate." if ramp and -5 <= ramp <= 5
-                    else "Reduce load this week." if ramp and ramp > 5
-                    else "Load has dropped — consider gentle increase.")
-        gz_note  = ("reduce tempo/threshold work" if (dm.get("grey_zone_percentage") or 0) > 15
-                    else "within acceptable range")
-        hrv_rec  = ("trending below 7-day baseline — prioritise sleep and recovery."
-                    if hrv_now and hrv_base and hrv_now < hrv_base
-                    else "at or above baseline — recovering well.")
-        c_rec    = ("eFTP below set FTP — confirm FTP is still current."
-                    if ct.get("eftp") and ct.get("ftp_outdoor") and ct["eftp"] < ct["ftp_outdoor"]
-                    else "FTP and eFTP aligned.")
-        r_rec    = ("eFTP below set FTP — confirm run FTP is current."
-                    if rt.get("eftp") and rt.get("ftp_outdoor") and rt["eftp"] < rt["ftp_outdoor"]
-                    else "FTP and eFTP aligned.")
-
-        A(f"**Training Phase:** Continue {v(dm.get('phase_detected'))} phase protocols. {v(dm.get('seasonal_context'))} — maintain aerobic base focus.")
-        A("")
-        A(f"**Load Management:** ACWR {v(acwr)} is {v(dm.get('acwr_interpretation'))}. Ramp rate {v(ramp)} CTL/wk. {ramp_rec}")
-        A("")
-        A(f"**Intensity:** Current TID: {v(tid7.get('classification'))} (PI {v(tid7.get('polarization_index'))}). "
-          f"Grey zone at {pct(dm.get('grey_zone_percentage'))} — {gz_note}. Quality intensity at {pct(dm.get('quality_intensity_percentage'))}.")
-        A("")
-        A(f"**Recovery:** Recovery Index {v(ri)}. HRV {hrv_rec}")
-        A("")
-        A(f"**Cycling:** FTP {v(ct.get('ftp_outdoor'), 'W')} / eFTP {v(ct.get('eftp'), 'W')}. {c_rec}")
-        A("")
-        A(f"**Running:** FTP {v(rt.get('ftp_outdoor'), 'W')} / eFTP {v(rt.get('eftp'), 'W')} / Threshold {v(rt.get('threshold_pace_min_per_km'))}. "
-          f"{r_rec} Run TID currently {v(tidP7.get('classification'))}.")
-        A("")
-        if rc.get("next_race"):
-            nr2 = rc["next_race"]
-            taper_note = ("TAPER ALERT: Reduce load now." if (rc.get("taper_alert") or {}).get("active")
-                          else "Continue normal training.")
-            A(f"**Race Prep:** {nr2['name']} in {nr2['days_until']} days. {taper_note}")
-        elif workout_races:
-            A(f"**Race Prep:** Race detected in planned workouts ({workout_races[0]['date'][:10]}). "
-              f"Log as a RACE event in Intervals.icu to activate race-week protocol.")
-        else:
-            A("**Race Prep:** No races in 90-day window. Continue base building.")
-        A("")
-        A("---")
-        A("")
-
-        # SECTION 12
-        A("## Section 12: Overall Performance Outlook")
-        A("")
-        ctl = fit.get("ctl")
-        tsb = fit.get("tsb")
-        vo2 = dm.get("vo2max")
-
-        ctl_note = ("Good aerobic base" if ctl and ctl > 80
-                    else "Moderate base" if ctl and ctl > 60 else "Building phase")
-        tsb_note = ("Fresh and ready to perform" if tsb and tsb > 10
-                    else "Accumulated fatigue — recovery needed" if tsb and tsb < -20
-                    else "Moderate fatigue, manageable")
-        vo2_note = ("Good aerobic capacity" if vo2 and vo2 >= 55
-                    else "Average to good" if vo2 and vo2 >= 45 else "Developing")
-        ready    = ("Athlete is ready to perform."
-                    if tsb and tsb > 5 and ri and ri >= 0.8
-                    else "Monitor recovery before key sessions.")
-
-        A(f"- **Fitness Trend (CTL):** {v(ctl)}  —  {ctl_note}")
-        A(f"- **Form (TSB):** {v(tsb)}  —  {tsb_note}")
-        A(f"- **Durability:** Trend: {v(dur.get('trend'))}  |  28d mean decoupling: {v(dur.get('mean_decoupling_28d'), '%')}")
-        A(f"- **Training Quality:** {v(tid7.get('classification'))} distribution. PI {v(dm.get('polarisation_index'))} vs target 0.80.")
-        A(f"- **VO2max:** {v(vo2, ' mL/kg/min')}  —  {vo2_note}")
-        A(f"- **Readiness:** TSB {v(tsb)}, RI {v(ri)}, HRV {v(hrv_now)} vs baseline {v(hrv_base)}. {ready}")
-        A(f"- **Data Confidence:** {v(hist.get('history_confidence'))} ({v(hist.get('total_months'))} months history)  |  "
-          f"HRV data points: {v(dq.get('hrv_data_points'))}  |  RHR data points: {v(dq.get('rhr_data_points'))}")
-        A("")
-        A("---")
-        A("")
-        A(f"*End of Report  |  sync.py v{meta.get('version', 'N/A')}  |  Generated: {generated}*")
-
-        return "\n".join(lines)
-
-    def save_to_markdown(self, data: Dict, filepath: str = "latest.md"):
-        """Save Section 11-compliant markdown report to local file"""
-        content = self.generate_markdown_report(data)
-        with open(filepath, "w") as f:
-            f.write(content)
-        print(f"Markdown report saved to {filepath}")
-        return filepath
-
-    def publish_markdown_to_github(self, md_content: str, filepath: str = "latest.md",
-                                    commit_message: str = None) -> str:
-        """Publish raw markdown string to GitHub repository"""
-        if not self.github_token or not self.github_repo:
-            raise ValueError("GitHub token and repo required for publishing")
-
-        if not commit_message:
-            commit_message = f"Update markdown report - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
-
-        headers = {
-            "Authorization": f"token {self.github_token}",
-            "Accept": "application/vnd.github+json"
-        }
-
-        url = f"{self.GITHUB_API_URL}/repos/{self.github_repo}/contents/{filepath}"
-        current_sha = None
-        try:
-            response = requests.get(url, headers=headers)
-            if response.status_code == 200:
-                current_file = response.json()
-                current_sha = current_file["sha"]
-                existing = base64.b64decode(current_file["content"]).decode()
-                if existing == md_content:
-                    print("⏭️  No changes in markdown report, skipping update")
-                    return f"https://raw.githubusercontent.com/{self.github_repo}/main/{filepath}"
-        except Exception as e:
-            print(f"⚠️  Could not check existing markdown file: {e}")
-
-        content_base64 = base64.b64encode(md_content.encode()).decode()
-        payload = {"message": commit_message, "content": content_base64, "branch": "main"}
-        if current_sha:
-            payload["sha"] = current_sha
-
-        response = requests.put(url, headers=headers, json=payload)
-        response.raise_for_status()
-        return f"https://raw.githubusercontent.com/{self.github_repo}/main/{filepath}"
 
 
 def main():
@@ -3961,13 +3485,9 @@ def main():
     
     if args.output:
         filepath = sync.save_to_file(data, args.output)
-        # Also save markdown report alongside the JSON
-        md_path = str(args.output).replace(".json", ".md") if str(args.output).endswith(".json") else str(args.output) + ".md"
-        sync.save_to_markdown(data, md_path)
         if args.anonymize:
             print(f"   🔒 Anonymization: ENABLED")
         print(f"\n✅ Data saved to {filepath}")
-        print(f"✅ Markdown report saved to {md_path}")
         print_summary()
         print(f"\n💡 Tip: Paste contents to AI, or upload the file directly")
         
@@ -3984,15 +3504,6 @@ def main():
                 print(f"   ⚠️ History generation failed (non-critical): {e}")
     else:
         raw_url = sync.publish_to_github(data)
-        
-        # Also publish markdown report to GitHub
-        try:
-            md_content = sync.generate_markdown_report(data)
-            sync.publish_markdown_to_github(md_content, filepath="latest.md",
-                commit_message=f"Auto-sync latest.md - {datetime.now().strftime('%Y-%m-%d %H:%M')}")
-            print(f"✅ Markdown report published to GitHub (latest.md)")
-        except Exception as e:
-            print(f"   ⚠️ Markdown publish failed (non-critical): {e}")
         
         print(f"\n✅ Data published to GitHub")
         if args.anonymize:
