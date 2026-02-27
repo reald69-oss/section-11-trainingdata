@@ -53,8 +53,8 @@ This document serves as a reference template for endurance athletes using the de
 
 | Goal | Target Date |
 |------|-------------|
-| [Primary goal] | [Year] |
-| [Secondary goal] | [Year] |
+| [Berlin Marathon] | [2026] |
+| [Capetown Marathon] | [2026] |
 | [Tertiary goal] | [Year] |
 
 **Current Phase:** [e.g., Marathon Training]  
@@ -172,16 +172,16 @@ This document serves as a reference template for endurance athletes using the de
 | Z7 | 151%+ | [Calculate] | Neuromuscular |
 | SS | 84–97% | [Calculate] | Sweetspot |
 
-**Current FTP:** [W] (Indoor: [W])  
-**Max HR:** [bpm]  
-**Threshold HR:** [bpm]
+**Current FTP:** [200] (Indoor: [200])  
+**Max HR:** [178]  
+**Threshold HR:** [158]
 
 ### Current Fitness Markers
 
 | Metric | Value | Notes |
 |--------|-------|-------|
-| FTP (Outdoor) | [W] | |
-| FTP (Indoor) | [W] | Adjusted for indoor conditions |
+| FTP (Outdoor) | [200] | |
+| FTP (Indoor) | [200] | Adjusted for indoor conditions |
 | LT2 Power (MLSS) | [W] | ≈[%] of FTP |
 | LT2 HR | [bpm] | |
 | LT1 (AeT) | [W] | HR ≈[bpm] |
