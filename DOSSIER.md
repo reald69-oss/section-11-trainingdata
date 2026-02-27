@@ -316,9 +316,9 @@ This document serves as a reference template for endurance athletes using the de
 
 ### JSON Endpoint (for AI coaches)
 
-**URL:** `https://raw.githubusercontent.com/[username]/[repo]/main/latest.json`
+**URL:** `https://raw.githubusercontent.com/reald69-oss/section-11-trainingdata/main/latest.json`
 
-**Archive:** `https://github.com/[username]/[repo]/tree/main/archive`
+**Archive:** `https://github.com/reald69-oss/section-11-trainingdata/tree/main/archive`
 
 This endpoint provides synchronized Intervals.icu metrics for deterministic AI parsing. See **Section 11** for the full AI Coach Guidance Protocol.
 
