@@ -12,7 +12,7 @@
   },
   "metadata": {
     "athlete_id": "REDACTED",
-    "last_updated": "2026-02-27T13:32:21.482650",
+    "last_updated": "2026-02-27T14:18:16.119215",
     "data_range_days": 7,
     "extended_range_days": 28,
     "version": "3.6.0"
@@ -31,7 +31,7 @@
   "history": {
     "available": true,
     "last_generated": "2026-02-26",
-    "age_days": 0,
+    "age_days": 1,
     "total_months": 35,
     "history_confidence": "high"
   },
@@ -69,10 +69,10 @@
   },
   "current_status": {
     "fitness": {
-      "ctl": 97.45,
-      "atl": 67.36,
-      "tsb": 30.09,
-      "ramp_rate": -4.65,
+      "ctl": 97.22,
+      "atl": 66.21,
+      "tsb": 31.01,
+      "ramp_rate": -4.88,
       "fitness_source": "Decayed from yesterday (today's planned workouts not yet completed)"
     },
     "thresholds": {
@@ -221,7 +221,7 @@
     },
     "phase_detected": "Recovery",
     "phase_triggers": [
-      "TSB 30.09 > +10"
+      "TSB 31.01 > +10"
     ],
     "seasonal_context": "Early Base",
     "benchmark_indoor": {
@@ -244,7 +244,7 @@
     "p_max": 699,
     "power_model_source": "wellness.sportInfo",
     "vo2max": null,
-    "calculation_timestamp": "2026-02-27T13:32:21.481788",
+    "calculation_timestamp": "2026-02-27T14:18:16.118330",
     "data_quality": {
       "hrv_data_points": 7,
       "rhr_data_points": 7,
@@ -686,6 +686,168 @@
       "type": "WORKOUT",
       "description": "- Race 21.1km 95-99%  \n\n",
       "planned_tss": 172,
+      "duration_hours": 0.0
+    },
+    {
+      "id": "event_3",
+      "date": "2026-03-02T00:00:00",
+      "name": "Planned Workout",
+      "type": "WORKOUT",
+      "description": "Recovery run\n- - - -\nImported with tp2intervals (https://github.com/freekode/tp2intervals)\n\n- - - -\n- Active 50m 70-75%  \n\n8x\n- Hard 10s 105-115%  \n- Easy 30s 70-75%  \n\n\n//////////\ntrainingPeaksId=3548301575",
+      "planned_tss": 50,
+      "duration_hours": 0.0
+    },
+    {
+      "id": "event_4",
+      "date": "2026-03-03T00:00:00",
+      "name": "Planned Workout",
+      "type": "WORKOUT",
+      "description": "WU 10\n3x5 LT1 (60s standing rest)\nCD 10\n- - - -\nImported with tp2intervals (https://github.com/freekode/tp2intervals)\n\n- - - -\n- Warm up 10m 70-80%  \n\n3x\n- LT 5m 90-92%  \n- Standing Rest 1m 0%  \n\n- Cool down 10m 70-80%  \n\n//////////\ntrainingPeaksId=3499403007",
+      "planned_tss": 41,
+      "duration_hours": 0.0
+    },
+    {
+      "id": "event_5",
+      "date": "2026-03-04T00:00:00",
+      "name": "Planned Workout",
+      "type": "WORKOUT",
+      "description": "\n- - - -\nImported with tp2intervals (https://github.com/freekode/tp2intervals)\n\n//////////\ntrainingPeaksId=3566179623",
+      "planned_tss": null,
+      "duration_hours": 0.0
+    },
+    {
+      "id": "event_6",
+      "date": "2026-03-04T00:00:00",
+      "name": "Planned Workout",
+      "type": "WORKOUT",
+      "description": "Easy\n`- - - -\n\n- - - -\nImported with tp2intervals (https://github.com/freekode/tp2intervals)\n\n- - - -\n- Easy 40m 70-75%  \n\n//////////\ntrainingPeaksId=3584831734",
+      "planned_tss": 35,
+      "duration_hours": 0.0
+    },
+    {
+      "id": "event_7",
+      "date": "2026-03-05T00:00:00",
+      "name": "Planned Workout",
+      "type": "WORKOUT",
+      "description": "Easy\n`- - - -\n\n- - - -\nImported with tp2intervals (https://github.com/freekode/tp2intervals)\n\n- - - -\n- Easy 1h 70-75%  \n\n//////////\ntrainingPeaksId=3499403757",
+      "planned_tss": 53,
+      "duration_hours": 0.0
+    },
+    {
+      "id": "event_8",
+      "date": "2026-03-06T00:00:00",
+      "name": "Planned Workout",
+      "type": "WORKOUT",
+      "description": "\n- - - -\nImported with tp2intervals (https://github.com/freekode/tp2intervals)\n\n//////////\ntrainingPeaksId=3566181453",
+      "planned_tss": null,
+      "duration_hours": 0.0
+    },
+    {
+      "id": "event_9",
+      "date": "2026-03-06T00:00:00",
+      "name": "Planned Workout",
+      "type": "WORKOUT",
+      "description": "Easy\n- - - -\nImported with tp2intervals (https://github.com/freekode/tp2intervals)\n\n- - - -\n- Easy 40m 70-75%  \n\n//////////\ntrainingPeaksId=3561864038",
+      "planned_tss": 35,
+      "duration_hours": 0.0
+    },
+    {
+      "id": "event_10",
+      "date": "2026-03-08T00:00:00",
+      "name": "Planned Workout",
+      "type": "WORKOUT",
+      "description": "\n- - - -\nImported with tp2intervals (https://github.com/freekode/tp2intervals)\n\n- - - -\n- LR 1h30m 76-82%  \n\n//////////\ntrainingPeaksId=3563163073",
+      "planned_tss": 93,
+      "duration_hours": 0.0
+    },
+    {
+      "id": "event_11",
+      "date": "2026-03-09T00:00:00",
+      "name": "Planned Workout",
+      "type": "WORKOUT",
+      "description": "Recovery + Strides\n- - - -\nImported with tp2intervals (https://github.com/freekode/tp2intervals)\n\n- - - -\n- Recovery 1h 70-75%  \n\n8x\n- Hard 10s 95-100%  \n- Easy 30s 70-75%  \n\n\n//////////\ntrainingPeaksId=3591009775",
+      "planned_tss": 58,
+      "duration_hours": 0.0
+    },
+    {
+      "id": "event_12",
+      "date": "2026-03-10T00:00:00",
+      "name": "Planned Workout",
+      "type": "WORKOUT",
+      "description": "WU 15\n2x15 LT1 (60s standing rest)\nCD 15\n- - - -\nImported with tp2intervals (https://github.com/freekode/tp2intervals)\n\n- - - -\n- Warm up 15m 70-80%  \n\n2x\n- LT 15m 90-93%  \n- Standing Rest 1m 0%  \n\n- Cool down 15m 70-80%  \n\n//////////\ntrainingPeaksId=3561864021",
+      "planned_tss": 72,
+      "duration_hours": 0.0
+    },
+    {
+      "id": "event_13",
+      "date": "2026-03-11T00:00:00",
+      "name": "Planned Workout",
+      "type": "WORKOUT",
+      "description": "\n- - - -\nImported with tp2intervals (https://github.com/freekode/tp2intervals)\n\n//////////\ntrainingPeaksId=3566179750",
+      "planned_tss": null,
+      "duration_hours": 0.0
+    },
+    {
+      "id": "event_14",
+      "date": "2026-03-11T00:00:00",
+      "name": "Planned Workout",
+      "type": "WORKOUT",
+      "description": "Easy\n- - - -\nImported with tp2intervals (https://github.com/freekode/tp2intervals)\n\n- - - -\n- Easy 1h 70-75%  \n\n//////////\ntrainingPeaksId=3561864048",
+      "planned_tss": 53,
+      "duration_hours": 0.0
+    },
+    {
+      "id": "event_15",
+      "date": "2026-03-12T00:00:00",
+      "name": "Planned Workout",
+      "type": "WORKOUT",
+      "description": "WU 15\n6x6 LT1 (60s standing rest)\nCD 15\n- - - -\nImported with tp2intervals (https://github.com/freekode/tp2intervals)\n\n- - - -\n- Warm up 15m 70-80%  \n\n6x\n- LT 6m 93-96%  \n- Standing Rest 1m 0%  \n\n- Cool down 15m 70-80%  \n\n//////////\ntrainingPeaksId=3561864041",
+      "planned_tss": 85,
+      "duration_hours": 0.0
+    },
+    {
+      "id": "event_16",
+      "date": "2026-03-13T00:00:00",
+      "name": "Planned Workout",
+      "type": "WORKOUT",
+      "description": "\n- - - -\nImported with tp2intervals (https://github.com/freekode/tp2intervals)\n\n//////////\ntrainingPeaksId=3566181500",
+      "planned_tss": null,
+      "duration_hours": 0.0
+    },
+    {
+      "id": "event_17",
+      "date": "2026-03-13T00:00:00",
+      "name": "Planned Workout",
+      "type": "WORKOUT",
+      "description": "Easy\n- - - -\nImported with tp2intervals (https://github.com/freekode/tp2intervals)\n\n- - - -\n- Easy 45m 70-75%  \n\n//////////\ntrainingPeaksId=3561864046",
+      "planned_tss": 39,
+      "duration_hours": 0.0
+    },
+    {
+      "id": "event_18",
+      "date": "2026-03-14T00:00:00",
+      "name": "Planned Workout",
+      "type": "WORKOUT",
+      "description": "\n- - - -\nImported with tp2intervals (https://github.com/freekode/tp2intervals)\n\n//////////\ntrainingPeaksId=3566290413",
+      "planned_tss": null,
+      "duration_hours": 0.0
+    },
+    {
+      "id": "event_19",
+      "date": "2026-03-14T00:00:00",
+      "name": "Planned Workout",
+      "type": "WORKOUT",
+      "description": "WU 15\n10x3 LT1 (60s standing rest)\nCD 15\n- - - -\nImported with tp2intervals (https://github.com/freekode/tp2intervals)\n\n- - - -\n- Warm up 15m 70-80%  \n\n10x\n- LT 3m 96-99%  \n- Standing Rest 1m 0%  \n\n- Cool down 15m 70-80%  \n\n//////////\ntrainingPeaksId=3561864050",
+      "planned_tss": 81,
+      "duration_hours": 0.0
+    },
+    {
+      "id": "event_20",
+      "date": "2026-03-15T00:00:00",
+      "name": "Planned Workout",
+      "type": "WORKOUT",
+      "description": "Long Run\n- - - -\nImported with tp2intervals (https://github.com/freekode/tp2intervals)\n\n- - - -\n- LR 2h 75-80%  \n\n//////////\ntrainingPeaksId=3561864051",
+      "planned_tss": 120,
       "duration_hours": 0.0
     }
   ],
