@@ -35,43 +35,42 @@ Fitness Progression:
 Key Performance Markers:
   Sweetspot power: [XXX]W → [XXX]W (target: [XXX]W — [hit/miss])
   VO2max power: [XXX]W → [XXX]W (target: [XXX]W — [hit/miss])
-  Long ride duration: [X.X]h → [X.X]h
+  Long ride duration: [XhYm] → [XhYm]
   Long ride decoupling trend: [X.X]% → [X.X]% [↑/↓/→]
   Best 20-min power: [XXX]W (week [X])
   Best 5-min power: [XXX]W (week [X])
 
 Polarization (block average):
-  Z1+Z2: [XX.X]%
-  Z3 (Grey Zone): [X.X]% (target <5%)
-  Z4+ (Quality): [X.X]% (target ~20% of intensity sessions)
-  Classification: [Classification] (PI: [X.XX])
+  Z1+Z2: [XX]%
+  Z3 (Grey Zone): [X]% (target <5%)
+  Z4+ (Quality): [X]% (target ~20% of intensity sessions)
   TID 28d (block-scale): [Classification] (PI: [X.XX])
   Hard days/week avg: [X.X]
 
 Polarization by Week:
-  Wk 1: Z1+Z2 [XX]%, Z3 [X]%, Z4+ [X]% — [Classification] (PI: [X.XX])
-  Wk 2: Z1+Z2 [XX]%, Z3 [X]%, Z4+ [X]% — [Classification] (PI: [X.XX])
-  Wk 3: Z1+Z2 [XX]%, Z3 [X]%, Z4+ [X]% — [Classification] (PI: [X.XX])
-  Wk 4: Z1+Z2 [XX]%, Z3 [X]%, Z4+ [X]% — [Classification] (PI: [X.XX])
+  Wk 1: Z1+Z2 [XX]%, Z3 [X]%, Z4+ [X]%
+  Wk 2: Z1+Z2 [XX]%, Z3 [X]%, Z4+ [X]%
+  Wk 3: Z1+Z2 [XX]%, Z3 [X]%, Z4+ [X]%
+  Wk 4: Z1+Z2 [XX]%, Z3 [X]%, Z4+ [X]%
 
 Durability by Week:
-  Wk 1: mean dec [X.X]%, [X] qualifying, [X] high-drift
-  Wk 2: mean dec [X.X]%, [X] qualifying, [X] high-drift
-  Wk 3: mean dec [X.X]%, [X] qualifying, [X] high-drift
-  Wk 4: mean dec [X.X]%, [X] qualifying, [X] high-drift
+  Wk 1: mean([X]) dec [X.X]%, [X] high-drift
+  Wk 2: mean([X]) dec [X.X]%, [X] high-drift
+  Wk 3: mean([X]) dec [X.X]%, [X] high-drift
+  Wk 4: mean([X]) dec [X.X]%, [X] high-drift
   Block trend: [improving/stable/declining]
 
 Efficiency Factor by Week:
-  Wk 1: mean EF [X.XX], [X] qualifying
-  Wk 2: mean EF [X.XX], [X] qualifying
-  Wk 3: mean EF [X.XX], [X] qualifying
-  Wk 4: mean EF [X.XX], [X] qualifying
+  Wk 1: mean([X]) EF [X.XX]
+  Wk 2: mean([X]) EF [X.XX]
+  Wk 3: mean([X]) EF [X.XX]
+  Wk 4: mean([X]) EF [X.XX]
   Block trend: [improving/stable/declining]
 
 Wellness (block avg vs previous block):
   HRV: [XX] ms (prev block: [XX] ms) [↑/↓/→] [assessment]
   RHR: [XX] bpm (prev block: [XX] bpm) [↑/↓/→] [assessment]
-  Sleep: [X.X]h (prev block: [X.X]h) [↑/↓/→] [assessment]
+  Sleep: [XhYm] (prev block: [XhYm]) [↑/↓/→] [assessment]
   Avg RI: [X.XX] (prev block: [X.XX])
   Avg Monotony: [X.XX] ([note])
 
@@ -84,7 +83,7 @@ Phase Progression Check:
   Phase recommendation: [Continue current / Progress to next / Extend / Insert recovery]
   Rationale: [1-2 sentences explaining why, based on metrics above]
 
-Assessment:
+Interpretation:
 [3-5 sentences — did the block achieve its goals? What adapted?
 What stalled? Recovery status entering next block. Key wins and
 concerns. Block-over-block comparison where relevant.]
@@ -109,7 +108,7 @@ Next Block Plan:
 | **eFTP** | Intervals.icu estimated FTP | Track alongside formal FTP — catches drift |
 | **Performance Markers** | Best efforts + target comparison | Shows whether stimulus is producing adaptation |
 | **Decoupling trend** | Long ride aerobic efficiency | Improving decoupling = aerobic base building |
-| **Polarization by Week** | Weekly zone distributions | Catches grey zone creep within a block |
+| **Polarization by Week** | Weekly zone distributions | Catches grey zone creep within a block. Append classification + PI only when week diverges from block-scale TID |
 | **Durability by Week** | Weekly mean decoupling from steady-state sessions | VI ≤ 1.05, ≥ 90min. Shows aerobic efficiency trajectory across block |
 | **Efficiency Factor by Week** | Weekly mean EF from steady-state cycling | VI ≤ 1.05, ≥ 20min. Shows aerobic fitness trajectory across block |
 | **TID 28d** | Block-scale Seiler classification | 28d window roughly matches block length; confirms or challenges weekly TID |
@@ -143,5 +142,9 @@ Next Block Plan:
 - **Efficiency Factor by Week** catches aerobic fitness trends that complement durability; rising EF at same intensity = improving fitness
 - **Phase Progression Check** makes the protocol's decision logic transparent to the athlete
 - **Next Block Plan** should flow directly from the Phase Progression Check — if criteria aren't met, explain what the next block does differently
-- Keep "Assessment" to coaching interpretation — the data is already presented above
+- Keep "Interpretation" to coaching interpretation — the data is already presented above
 - Block reports are the most detailed report type (~45-60 lines) — this is where the deep analysis lives
+
+## Formatting Rule
+
+- **Durations and sleep:** Always use `_formatted` fields from JSON (e.g., `sleep_formatted`, `duration_formatted`, `total_training_formatted`). Never convert decimal `_hours` fields to display format — the formatted values are pre-calculated from raw seconds and avoid rounding errors.
