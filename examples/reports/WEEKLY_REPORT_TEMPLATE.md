@@ -11,7 +11,7 @@ Generated at end of training week (Saturday or Sunday morning).
 ```
 Week [X] Summary ([date range])
 Block: [Name] — Week [X/Y]
-Phase: [Base/Build/Peak/Taper/Recovery]
+Phase: [Build/Base/Peak/Taper/Deload/Recovery/Overreached] (confidence: [high/medium/low])
 
 Compliance: [X/X] sessions completed
 Planned TSS: [XXX] | Actual TSS: [XXX] ([XX]%)
