@@ -67,18 +67,7 @@ The script creates/maintains these files:
 
 ### FTP History
 
-`ftp_history.json` tracks indoor and outdoor FTP changes over time:
-
-```json
-{
-  "indoor": {"2026-01-01": 270, "2026-02-01": 275},
-  "outdoor": {"2026-01-01": 280, "2026-02-01": 287}
-}
-```
-
-- Updated automatically when FTP changes
-- Used to calculate **Benchmark Index** (8-week FTP progression)
-- Keep this file if you want continuous tracking
+`ftp_history.json` tracks indoor and outdoor FTP changes over time. Updated automatically when FTP changes. Used to calculate **Benchmark Index** (8-week FTP progression). Keep this file if you want continuous tracking. See [auto-sync SETUP](../json-auto-sync/SETUP.md#ftp-history-tracking) for details on the Benchmark Index.
 
 ### History Data
 
@@ -94,31 +83,17 @@ Also includes period summaries, FTP timeline, and data gap detection. Generated 
 
 ## What's Included
 
-The export includes pre-calculated **derived metrics** for Section 11 compliance:
+The export includes pre-calculated **derived metrics** for Section 11 compliance — AI should use these, not calculate its own. Key metrics: ACWR, Recovery Index, Monotony/Strain, Grey Zone %, Quality Intensity %, Polarisation Index, Benchmark Index, Phase Detection, Seiler TID, Aggregate Durability, and TID Drift.
 
-| Metric | Description |
-|--------|-------------|
-| CTL / ATL / TSB | Fitness, fatigue, form (decay-corrected) |
-| Ramp Rate | Training load trend (smart: excludes uncompleted planned workouts) |
-| ACWR | Acute: Chronic Workload Ratio |
-| Recovery Index | HRV/RHR composite |
-| Monotony / Strain | Training variability metrics |
-| Grey Zone % | Z3 time (to minimize) |
-| Quality Intensity % | Z4+ time (target ~20%) |
-| Polarisation Index | Easy time ratio (target ~80%) |
-| Benchmark Index | 8-week FTP progression |
-| Phase Detected | Auto-detected training phase |
+See [examples/README.md](../README.md#derived-metrics) for the full derived metrics table.
 
 ## Use with AI
 
-**Option 1: Upload files**
-Upload both `latest.json` and `history.json` to your AI platform for a complete analysis with longitudinal context.
+**Option 1: Upload files** — Upload both `latest.json` and `history.json` to your AI platform for a complete analysis with longitudinal context.
 
-**Option 2: Push to GitHub + configure AI**
-Push to a GitHub repo (private recommended), then follow the instructions in the main [README](../README.md#quick-start). Provide both JSON URLs to your AI coach.
+**Option 2: Push to GitHub + configure AI** — Push to a GitHub repo (private recommended), then follow the [main README setup guide](../../README.md#web-chat-setup). Most AI platforms now have GitHub connectors that can access private repos directly.
 
-**Option 3: Use with desktop agents**
-Claude Cowork, OpenAI Codex CLI, and local OpenClaw can read files directly from your filesystem — no GitHub needed. Point the agent at the folder containing your exported JSON files.
+**Option 3: Use with agentic platforms** — Claude Code, Claude Cowork, OpenAI Codex CLI, Gemini CLI, and OpenClaw can read files directly from your filesystem — no GitHub needed. Point the agent at the folder containing your exported JSON files. See the [agentic setup guide](../../README.md#agentic-setup).
 
 ---
 
@@ -151,3 +126,5 @@ Run `python sync.py --setup` first.
 
 ### FTP history not updating
 FTP history only adds entries when FTP **changes**. If your FTP is the same, no new entry is added.
+
+For general AI platform issues (data not fetching, AI fabricating metrics, connector problems), see the [main README troubleshooting guide](../../README.md#troubleshooting).
