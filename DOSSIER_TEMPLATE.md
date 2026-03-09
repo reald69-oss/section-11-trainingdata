@@ -320,6 +320,14 @@ This document serves as a reference template for endurance athletes using the de
 
 **Archive:** `https://github.com/[username]/[repo]/tree/main/archive`
 
+**— OR (local setup) —**
+
+**Path:** `latest.json` (workspace root, alongside this dossier)
+
+**History:** `history.json` (workspace root)
+
+For local setups where sync.py runs on the same machine as the AI agent, files are read directly from the filesystem — no URLs needed. See `examples/json-local-sync/SETUP.md` for the complete local pipeline.
+
 This endpoint provides synchronized Intervals.icu metrics for deterministic AI parsing. See **Section 11** for the full AI Coach Guidance Protocol.
 
 ---

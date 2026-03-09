@@ -1,22 +1,13 @@
 {
-  "notification_id": "2026-03-05",
+  "notification_id": "2026-03-08",
   "changes": [
-    "— v3.6.5→v3.74 + push.py v0.3 + protocol v11.13 (2026-03-05) —",
-    "sync.py v3.6.5: Real activity/event IDs (opaque keys, not PII). coach_notes + chat_notes arrays for AI annotation round-trip",
-    "sync.py v3.7: Phase detection v2 — dual-stream (retrospective history + prospective calendar). 8 states, confidence scoring, reason codes, hysteresis. weekly_180d enriched with per-week phase, acwr, monotony",
-    "sync.py v3.71: HRRc (heart rate recovery) — per-activity + 7d/28d aggregate trend in capability namespace. Display only",
-    "sync.py v3.72: Readiness Decision — deterministic go/modify/skip via P0-P3 priority ladder. 7 signals (HRV/RHR/Sleep/TSB/ACWR/Feel/RI) with phase-adjusted thresholds. Replaces phantom AAS",
-    "sync.py v3.73: Phase detection fix — prospective windows aligned to training week (configurable via WEEK_START secret/config/env, default Monday). Fixes mid-week deload misclassification",
-    "sync.py v3.74: Null-safe handling for planned event fields (moving_time, description). auto-sync.yml git config fix for README update step",
-    "push.py v0.3: set-threshold (sport-specific FTP/LTHR updates with preview), annotate (notes on activities/events via description or chat). push-workout.yml for GitHub Actions dispatch",
-    "SECTION_11.md v11.11→v11.13: Phase detection criteria, HRRc, Readiness Decision section. AAS replaced with deterministic priority ladder",
-    "Report templates: Phase narrative (weekly/block), HRRc (all templates), readiness_decision (pre-workout), EF added. XhYm formatting throughout",
-    "auto-sync.yml: WEEK_START secret support, archive monthly subdirectories (archive/YYYY-MM/)",
-    "Documentation: Gemini platform guidance, WEEK_START setup in all SETUP files, private repo access updates, WORKOUT_REFERENCE rewrite",
-    "Upgrade note: After updating sync.py, delete history.json and run twice — first run regenerates history, second run uses it for phase detection",
-    "— v3.6.2→v3.6.4 + push.py v0.2 (2026-03-03) —",
-    "sync.py v3.6.2→3.6.4: Planned workout summaries — interval sessions compressed to one-line shapes. Tiered detail: full days 0-7, skeleton days 8-42. Human-readable time fields (XhYm) throughout",
-    "push.py v0.2 + push-workout.yml: Write planned workouts to Intervals.icu calendar (push, list, move, delete). GitHub Actions dispatch or local CLI. Template ID mappings for all 14 Workout Reference sessions",
-    "Report templates: All report templates and examples updated with XhYm formatting + Formatting Rule section"
+    "— sync.py v3.77 - Hash-based manifest for --update (all repo files tracked)",
+    "— sync.py v3.75→v3.76 + local sync pipeline + docs overhaul (2026-03-08) —",
+    "sync.py v3.75: --init (download full repo), --update (pull changed files from manifest), --lockfile (prevent overlapping runs), working directory awareness, manifest check on sync runs",
+    "sync.py v3.76: Bug fixes — workout summary trailing rep off-by-one (13-rep set reported as 12×30s), deload phase detection blind spot (Path C: retrospective deload from completed data when no plan exists)",
+    "manifest.json replaces changelog.json for update tracking. After updating to v3.76, sync.py reads manifest.json automatically.",
+    "New local deployment path: python3 sync.py --setup → --init → section11/examples/sync.py. No GitHub needed. See examples/json-local-sync/SETUP.md",
+    "Documentation: README restructured (GitHub/local sync as equal paths, GitHub connector table). SETUP_ASSISTANT.md rewritten (two-question routing: platform type + sync method, four valid combos). SKILL.md rewritten (three-tier file fallback). All cross-references updated.",
+    "Upgrade: replace your sync.py with the latest from github.com/CrankAddict/section-11/tree/main/examples/sync.py"
   ]
 }
