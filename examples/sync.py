@@ -4,6 +4,11 @@ Intervals.icu → GitHub/Local JSON Export
 Exports training data for LLM access.
 Supports both automated GitHub sync and manual local export.
 
+Version 3.78 - Bug fix: weekly history aligned to configured week start (was hardcoded Monday)
+  - _build_weekly_tier respects week_start_day setting; fixes Sunday-start week misalignment
+  - Update checker: removed manifest.json fallback from _check_for_updates(), changelog.json only
+  - Log rotation: sync.log trimmed to 200 lines when over 1MB
+
 Version 3.77 - Hash-based manifest for --update (all repo files tracked, no manual version bumps)
   - --generate-manifest: maintainer command, walks repo, hashes all files, writes manifest.json
   - --update: compares SHA256 hashes instead of version strings, detects new files automatically
@@ -32,45 +37,13 @@ Version 3.75 - Working directory awareness + local setup
   - --lockfile flag: prevent overlapping runs for automated timers (stale detection via PID + 10-min age)
   - Update notifications: manifest.json preferred, changelog.json fallback (backward compatible)
   - Bootstrap flow: python sync.py --setup → python sync.py --init → use section11/examples/sync.py going forward
+  
+Version 3.73 - Phase detection: Stream 2 windows aligned to training week, configurable week start (config/env/CLI)
+Version 3.72 - Readiness Decision: pre-computed go/modify/skip via P0-P3 priority ladder, 7 signals, phase modifiers
+Version 3.71 - HRRc integration: 7d/28d aggregate trend in capability namespace (display only)
+Version 3.7 - Phase detection v2: dual-stream (retrospective + prospective), 8 states, confidence scoring, hysteresis
 
-Version 3.73 - Phase detection: week-aligned prospective windows
-  - Stream 2 windows aligned to training week instead of rolling 7-day from today
-  - Fixes mid-week deload misclassification: rolling window leaked next week's build sessions
-  - Configurable week start: .sync_config.json "week_start", WEEK_START env var, or --week-start CLI
-  - Default Monday (ISO). Set once in config, never think about it again
-  - Current week window: today → week end. Next week: next full training week
-  - Planned TSS delta projected to full-week equivalent from remaining days
-  - Hard sessions and plan coverage scoped to current week remainder only
-
-Version 3.72 - Readiness Decision (AAS formalization)
-  - Pre-computed go/modify/skip via P0-P3 priority ladder (safety → overload → fatigue → green light)
-  - 7 signals evaluated: HRV, RHR, Sleep, TSB, ACWR, Feel, RI — green/amber/red/unavailable
-  - Phase modifiers: Build loosens (3 amber), Taper/Race week tighten (1 amber), others default (2)
-  - Structured modification output: triggers + adjustment directions (intensity/volume/cap_zone)
-  - Wires into existing tier-1 alerts (P0/P1) — no duplication
-  - Top-level readiness_decision object in output JSON, alongside alerts
-
-Version 3.71 - HRRc (heart rate recovery) integration
-  - Added icu_hrr (HRRc) field to formatted activity output as "hrrc"
-  - Added _calculate_hrrc_trend(): 7d/28d aggregate HRRc in capability namespace
-  - Qualifying: icu_hrr not null, min 1 session/7d, min 3 sessions/28d
-  - Trend: >10% difference = improving/declining (conservative for field noise)
-  - Display only — not wired into readiness_decision signals
-
-Version 3.7 - Phase detection v2: dual-stream architecture (retrospective + prospective)
-  - Stream 1: 4-week lookback from weekly_180d — CTL slope, ACWR trend, hard-day density, monotony
-  - Stream 2: planned workouts + race calendar — planned TSS delta, hard sessions, race proximity
-  - 8 phase states: Build/Base/Peak/Taper/Deload/Recovery/Overreached/null
-  - Confidence scoring (high/medium/low), reason codes, hysteresis from previous_phase
-  - weekly_180d enriched: per-week phase_detected, acwr, monotony, intensity_basis_breakdown
-  - Overreached false-positive fixes, Peak/Deload gate refinements
-
-Version 3.6.5 - Real IDs + Coach Notes
-  - Activity/event IDs always real (opaque keys, not PII). Athlete ID still REDACTED when anonymized
-  - coach_notes array: NOTE: lines parsed from activity/event descriptions
-  - chat_notes array: fetches activity messages endpoint when has_messages is true
-  - Enables push.py v0.3 annotate round-trip (write via push.py, read via sync.py)
-
+Version 3.6.5 - Real activity/event IDs, coach_notes + chat_notes arrays, push.py annotate round-trip
 Version 3.6.4 - READ_THIS_FIRST display_formatting instruction, report template XhYm alignment
 Version 3.6.3 - Human-readable _formatted fields (duration, sleep, training hours), floored to minutes
 Version 3.6.2 - Workout summary parser (Pattern A/B), tiered planned workout detail (0-7d full, 8-42d skeleton)
@@ -113,7 +86,7 @@ class IntervalsSync:
     HISTORY_FILE = "history.json"
     UPSTREAM_REPO = "CrankAddict/section-11"
     CHANGELOG_FILE = "changelog.json"
-    VERSION = "3.77"
+    VERSION = "3.78"
 
     # Sport family mapping for per-sport monotony calculation
     # Multi-sport athletes get inflated total monotony when cross-training
@@ -3559,10 +3532,11 @@ class IntervalsSync:
         
         # Calculate weeks
         start_date = now - timedelta(days=days)
-        # Align to Monday
-        start_monday = start_date - timedelta(days=start_date.weekday())
+        # Align to configured week start day
+        days_since_week_start = (start_date.weekday() - self.week_start_day) % 7
+        start_aligned = start_date - timedelta(days=days_since_week_start)
         
-        current = start_monday
+        current = start_aligned
         while current < now:
             week_end = current + timedelta(days=6)
             if week_end > now:
