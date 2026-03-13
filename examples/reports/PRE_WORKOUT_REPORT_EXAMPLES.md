@@ -138,6 +138,7 @@ RHR: 50 bpm (baseline: 46 bpm)
 HRV: 42 ms (7d avg: 54 ms)
 Sleep: 5h12m
 Sleep Quality: 4/4
+Feel (last session): 4/5 (Poor)
 TSB: -12.80
 CTL: 74.90
 ATL: 87.70

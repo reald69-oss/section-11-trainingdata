@@ -9,7 +9,7 @@
 **v11.13 — Readiness Decision (AAS Formalization):**
 - Pre-computed `readiness_decision` replaces implicit go/modify/skip synthesis
 - Priority ladder: P0 (safety stop) → P1 (acute overload) → P2 (accumulated fatigue) → P3 (green light)
-- 7 signals evaluated: HRV, RHR, Sleep, TSB, ACWR, Feel, RI — each with green/amber/red/unavailable status
+- 6 signals evaluated: HRV, RHR, Sleep, TSB, ACWR, RI — each with green/amber/red/unavailable status
 - Phase modifiers: Build loosens thresholds (3 amber), Taper/Race week tighten (1 amber), all others default (2 amber)
 - Structured modification output: trigger categories + adjustment directions (intensity/volume/cap_zone)
 - Wires into existing alerts (P0/P1 read tier-1 alarms, no duplication)
@@ -121,9 +121,13 @@ If the AI instance does not retain prior context (e.g., new chat or session), it
 
 #### Data Mirror Integration
 
-If the AI or LLM system is not directly or indirectly connected to the Intervals.icu API, it may reference an athlete-provided public data mirror.
+If the AI or LLM system is not directly or indirectly connected to the Intervals.icu API, it may reference an athlete-provided data mirror. There are three access methods — use the first available:
 
-**Example endpoint format:**
+1. **Local files** — data directory on the same filesystem (agentic platforms)
+2. **GitHub connector** — the athlete's data repo connected via the platform's native GitHub integration. The AI reads `latest.json`, `history.json`, and any other committed files (e.g., `DOSSIER.md`, `SECTION_11.md`) directly through the connector. No URLs needed. Connectors are read-only — they cannot trigger GitHub Actions or execute scripts.
+3. **URL fetch** — raw GitHub URLs as defined in the athlete dossier
+
+**Example endpoint format (URL fetch):**
 ```
 https://raw.githubusercontent.com/[username]/[repo]/main/latest.json
 ```
@@ -138,11 +142,11 @@ https://github.com/[username]/[repo]/tree/main/archive
 https://raw.githubusercontent.com/[username]/[repo]/main/history.json
 ```
 
-> **Note:** The actual URLs for your data mirror are defined in your athlete dossier. The AI must fetch from the dossier-specified endpoint.
+> **Note:** The actual URLs for your data mirror are defined in your athlete dossier. When using URL fetch, the AI must fetch from the dossier-specified endpoint. When using a GitHub connector, the AI reads directly from the connected repo.
 
 This file represents a synchronized snapshot of current Intervals.icu metrics and activity summaries, structured for deterministic AI parsing and audit compliance.
 
-The JSON endpoint is considered a **Tier-1 verified mirror** of Intervals.icu and inherits its trust priority in the Data Integrity Hierarchy. All metric sourcing and computation must reference it deterministically, without modification or estimation.
+The JSON data — whether accessed via local files, GitHub connector, or URL fetch — is considered a **Tier-1 verified mirror** of Intervals.icu and inherits its trust priority in the Data Integrity Hierarchy. All metric sourcing and computation must reference it deterministically, without modification or estimation.
 
 If the data appears stale or outdated, the AI must explicitly request a data refresh before providing recommendations or generating analyses.
 
@@ -517,7 +521,7 @@ Before providing recommendations, AI systems must verify:
 
 | #  | **Check**                        | **Deterministic Rules/Requirement**.                                                                                                                   |
 |----|----------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------|
-| 0  | **Data Source Fetch**            | Fetch JSON from mirror URL FIRST. If fetch fails or data unavailable, STOP and request manual data input.                                              |
+| 0  | **Data Source Fetch**            | Load JSON from data source FIRST (local files → GitHub connector → URL fetch). If all methods fail or data unavailable, STOP and request manual data input.                                              |
 | 1  | FTP Source Verification          | Confirm FTP/LT2 is explicitly athlete-provided or from API/JSON mirror via sport-family lookup (`thresholds.sports[family]`). Do not infer, recalculate, or cross-apply thresholds across sport families. |
 | 2  | Data Consistency Check           | Verify weekly training hours and load totals match the “READ_THIS_FIRST → quick_stats” dataset. Confirm totals within ±1% tolerance of logged data     |             
 | 3  | No Virtual Math Policy           | Ensure all computed metrics originate from raw or mirrored data. No interpolation, smoothing, or estimation permitted.                                 |
@@ -730,7 +734,7 @@ If any values breach limits, shift guidance toward load modulation or recovery e
 If multiple data sources conflict:
 
 1. **Intervals.icu API** → Primary source for power, HRV, CTL/ATL, readiness metrics
-2. **Intervals.icu JSON Mirror** → Verified Tier-1 mirror source (read-only reference)
+2. **Intervals.icu JSON Mirror** → Verified Tier-1 mirror source (local files, GitHub connector, or URL fetch — all carry the same trust level)
 3. **Garmin Connect** → Backup for HR, sleep, RHR
 4. **Athlete-provided data** → Valid if recent (<7 days) and stated explicitly
 5. **Dossier Baselines** → Fallback reference
@@ -790,7 +794,6 @@ AI systems must only consider caloric-reduction or weight-optimization phases du
 | Sleep | ≥ 7h AND quality ≤ 2 | 5–7h OR quality 3 | < 5h OR quality 4 |
 | TSB | > phase threshold (default -15) | Between threshold and -30 | < -30 |
 | ACWR | 0.8–1.3 | <0.8 or 1.3–1.5 | > 1.5 |
-| Feel | ≤ 3 (1=Strong, 5=Weak) | 4 | 5 |
 | RI | ≥ 0.8 | 0.6–0.79 | < 0.6 |
 
 Missing signals are classified as `unavailable` and excluded from amber/red counts.
@@ -817,7 +820,6 @@ When recommendation is `modify`, the output includes trigger categories and adju
 | TSB-only | preserve | reduce | — |
 | ACWR-driven | reduce | reduce | Z2 |
 | Combined (2+) | reduce | reduce | — |
-| Feel-only | reduce | preserve | — |
 
 **Race week interaction:** Readiness can escalate (Go → Modify → Skip) during race week but cannot loosen race protocol targets. When `race_week_defers: true`, modification guidance defers to the race-week protocol's day-by-day targets. The race protocol sets the ceiling; readiness can only push it down.
 
@@ -993,7 +995,7 @@ It governs acute, session-level performance safety, ensuring localized overreach
 **Integration:**
 Daily metrics synchronised through data hierarchy and mirrored in JSON dataset each morning. AI-coach systems must reference latest values before prescribing or validating any session.
 
-If HRV unavailable, "Feel" substitutes as primary readiness indicator.
+If HRV unavailable, Sleep quality substitutes as primary subjective readiness indicator.
 
 ---
 
@@ -1046,7 +1048,7 @@ Any training modification requires reconfirming **HRV**, **RHR**, and **subjecti
 **⚠️ Metric Hierarchy:**  
 These metrics are **secondary** to the primary readiness markers defined in Section 8 (Readiness & Recovery Thresholds). AI systems must evaluate in this order:
 
-1. **Primary readiness:** RI, HRV, RHR, Feel
+1. **Primary readiness:** RI, HRV, RHR, Sleep
 2. **Secondary load metrics:** Stress Tolerance, Load-Recovery Ratio, Consistency Index
 3. **Tertiary diagnostics:** Zone Distribution Metrics, Durability Sub-Metrics, Capability Metrics (Aggregate Durability, TID Drift)
 
@@ -1637,7 +1639,7 @@ When a plan requires a structured session (per Section 4), the AI must select fr
 
 **Selection rules:**
 - Match target adaptation (Sweet Spot, VO₂max, Endurance, etc.) to the session slot identified by the plan.
-- Use Section 11 A readiness outputs (TSB, RI, HRV trend, Feel score) to choose the appropriate format variant and intensity level within that adaptation category.
+- Use Section 11 A readiness outputs (TSB, RI, HRV trend) to choose the appropriate format variant and intensity level within that adaptation category.
 - Apply the Reference Library's session sequencing rules when placing sessions within the microcycle.
 - Warm-up and cool-down structures must follow the Reference Library's WU/CD protocols unless the athlete has documented personal preferences.
 
@@ -1738,7 +1740,7 @@ This subsection defines the formal self-validation and audit metadata structure 
 
 | Field                          | Type     | Description                                                                         |
 |--------------------------------|----------|-------------------------------------------------------------------------------------|
-| `data_source_fetched`          | boolean  | Whether JSON was successfully fetched from mirror URL                               |
+| `data_source_fetched`          | boolean  | Whether JSON was successfully loaded from data source (local files, connector, or URL) |
 | `json_fetch_status`            | string   | "success" / "failed" / "unavailable" — stop and request manual input if not success |
 | `protocol_version`             | string   | Section 11 version being followed                                                   |
 | `checklist_passed`             | array    | List of checklist items (1–10) that passed validation                               |
@@ -1770,7 +1772,7 @@ This subsection defines the formal self-validation and audit metadata structure 
 | `readiness_decision`           | object   | Pre-computed go/modify/skip decision (v3.72+). Top-level, alongside `alerts`. |
 | `readiness_decision.recommendation` | string | "go" / "modify" / "skip" — baseline recommendation for pre-workout reports. |
 | `readiness_decision.priority`  | number   | 0 (safety stop), 1 (acute overload), 2 (accumulated fatigue), 3 (green light). |
-| `readiness_decision.signals`   | object   | Per-signal status objects (hrv, rhr, sleep, tsb, acwr, feel, ri). Each has `status` (green/amber/red/unavailable) and raw values with deltas. |
+| `readiness_decision.signals`   | object   | Per-signal status objects (hrv, rhr, sleep, tsb, acwr, ri). Each has `status` (green/amber/red/unavailable) and raw values with deltas. |
 | `readiness_decision.signal_summary` | object | Pre-counted tallies: `green`, `amber`, `red`, `unavailable`. |
 | `readiness_decision.phase_context` | object | `phase`, `phase_week`, `amber_threshold`, `modifier_applied` — shows which phase rule shifted thresholds. |
 | `readiness_decision.race_week_defers` | boolean | When true, modification guidance defers to race-week protocol day-by-day targets. |
@@ -1809,7 +1811,7 @@ This subsection defines the formal self-validation and audit metadata structure 
 
 | Field                 | Type    | Description                                                                         |
 |-----------------------|---------|-------------------------------------------------------------------------------------|
-| `data_source_fetched` | boolean | Whether JSON was successfully fetched from mirror URL                               |
+| `data_source_fetched` | boolean | Whether JSON was successfully loaded from data source (local files, connector, or URL) |
 | `json_fetch_status`   | string  | "success" / "failed" / "unavailable" — stop and request manual input if not success |
 | `plan_version`        | string  | Version identifier for the plan                                                     |
 | `phase`               | string  | Current macro-phase (Base/Build/Peak/Taper/Recovery)                                |

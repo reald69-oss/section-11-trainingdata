@@ -16,6 +16,7 @@ RHR: [XX] bpm (baseline: [XX] bpm)
 HRV: [XX] ms (7d avg: [XX] ms)
 Sleep: [XhYm]
 Sleep Quality: [X/4]
+Feel (last session): [X/5] ([label])
 TSB: [X.XX]
 CTL: [XX.XX]
 ATL: [XX.XX]
@@ -57,6 +58,7 @@ AI may override the pre-computed recommendation with explicit rationale.]
 |-------|------|
 | Weather | Include if athlete location is available via profile or memory |
 | Coach note (weather) | Include only if actionable (e.g., dress warm, indoor day) |
+| Feel (last session) | Omit if unavailable. Source: most recent activity in `recent_activities` with feel populated. Labels: 1=Strong, 2=Good, 3=Normal, 4=Poor, 5=Weak. Not a readiness signal — context only |
 | Monotony | Include **only** if > 2.3. Omit entirely when normal |
 | Durability | Include if qualifying sessions exist. Omit if 0 qualifying sessions in 7d |
 | EF | Include if qualifying sessions exist. Omit if 0 qualifying sessions in 7d |
@@ -69,7 +71,7 @@ AI may override the pre-computed recommendation with explicit rationale.]
 
 The `readiness_decision` object in `latest.json` provides a pre-computed go/modify/skip recommendation with priority level and individual signal statuses. Use this as the baseline.
 
-**Signal statuses** are in `readiness_decision.signals` (hrv, rhr, sleep, tsb, acwr, feel, ri — each with green/amber/red/unavailable and raw values).
+**Signal statuses** are in `readiness_decision.signals` (hrv, rhr, sleep, tsb, acwr, ri — each with green/amber/red/unavailable and raw values).
 
 **Phase-adjusted thresholds** are in `readiness_decision.phase_context` (shows which phase modifier shifted the amber threshold).
 
