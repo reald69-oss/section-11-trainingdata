@@ -6,6 +6,61 @@
     "extended_data_note": "ACWR and baselines calculated from 28 days of data",
     "capability_metrics_note": "The 'capability' block in derived_metrics contains durability trend (aggregate decoupling 7d/28d), efficiency factor trend (aggregate EF 7d/28d), HRRc trend (heart rate recovery 7d/28d), and TID comparison (7d vs 28d distribution drift). These measure HOW the athlete expresses fitness, not just load. Use these for coaching context alongside traditional load metrics. Durability and EF trend direction matters more than absolute values. HRRc is display only \u2014 higher = better parasympathetic recovery.",
     "readiness_decision_note": "The 'readiness_decision' block contains a pre-computed go/modify/skip recommendation with priority level (P0=safety, P1=overload, P2=fatigue, P3=green), individual signal statuses, phase-adjusted thresholds, and structured modification guidance. Use this as the baseline for pre-workout recommendations. Override with explanation in the coach note if the AI's contextual judgment disagrees.",
+    "zone_preference": "default (power preferred, HR fallback)",
+    "wellness_field_scales": {
+      "note": "All categorical wellness fields use a 1-4 positional scale where 1 = best state, 4 = worst state. Labels differ per field but direction is consistent. Fields are null when not reported.",
+      "sleep_quality": {
+        "1": "GREAT",
+        "2": "OK",
+        "3": "POOR",
+        "4": "WORST"
+      },
+      "fatigue": {
+        "1": "None",
+        "2": "Some",
+        "3": "High",
+        "4": "Extreme",
+        "ui_note": "Labeled 'Pre training' in Intervals.icu"
+      },
+      "soreness": {
+        "1": "None",
+        "2": "Some",
+        "3": "High",
+        "4": "Extreme",
+        "ui_note": "Labeled 'Pre training' in Intervals.icu"
+      },
+      "stress": {
+        "1": "LOW",
+        "2": "AVG",
+        "3": "HIGH",
+        "4": "EXTREME"
+      },
+      "mood": {
+        "1": "GREAT",
+        "2": "GOOD",
+        "3": "OK",
+        "4": "GRUMPY"
+      },
+      "motivation": {
+        "1": "EXTREME",
+        "2": "HIGH",
+        "3": "AVG",
+        "4": "LOW"
+      },
+      "injury": {
+        "1": "NONE",
+        "2": "NIGGLE",
+        "3": "POOR",
+        "4": "INJURED"
+      },
+      "hydration": {
+        "1": "GOOD",
+        "2": "OK",
+        "3": "POOR",
+        "4": "BAD"
+      },
+      "menstrual": "menstrual_phase and menstrual_phase_predicted are not on the 1-4 scale. Values: PERIOD, FOLLICULAR, OVULATION, LUTEAL, etc."
+    },
     "quick_stats": {
       "total_training_hours": 14.71,
       "total_training_formatted": "14h42m",
@@ -15,10 +70,10 @@
   },
   "metadata": {
     "athlete_id": "REDACTED",
-    "last_updated": "2026-03-16T04:45:03.618370",
+    "last_updated": "2026-03-16T06:05:07.477892",
     "data_range_days": 7,
     "extended_range_days": 28,
-    "version": "3.81"
+    "version": "3.86"
   },
   "alerts": [
     {
@@ -69,7 +124,7 @@
     },
     "phase_context": {
       "phase": "Build",
-      "phase_week": 0,
+      "phase_week": 1,
       "amber_threshold": 3,
       "modifier_applied": "build_loosened"
     },
@@ -173,7 +228,33 @@
       "hrv": 69.0,
       "sleep_quality": 1,
       "sleep_hours": 7.65,
-      "sleep_formatted": "7h39m"
+      "sleep_formatted": "7h39m",
+      "sleep_score": 91.0,
+      "fatigue": null,
+      "soreness": null,
+      "stress": null,
+      "mood": null,
+      "motivation": null,
+      "injury": null,
+      "hydration": null,
+      "spO2": null,
+      "blood_glucose": null,
+      "systolic": null,
+      "diastolic": null,
+      "baevsky_si": null,
+      "lactate": null,
+      "respiration": null,
+      "body_fat_pct": null,
+      "abdomen_cm": null,
+      "steps": 55,
+      "hydration_volume_l": null,
+      "kcal_consumed": null,
+      "carbohydrates_g": null,
+      "protein_g": null,
+      "fat_g": null,
+      "menstrual_phase": null,
+      "menstrual_phase_predicted": null,
+      "readiness": null
     }
   },
   "derived_metrics": {
@@ -203,7 +284,8 @@
       "z2_hours": 6.61,
       "z3_hours": 2.25,
       "z4_plus_hours": 2.79,
-      "total_hours": 14.71
+      "total_hours": 14.71,
+      "zone_basis": "mixed"
     },
     "grey_zone_percentage": 15.3,
     "grey_zone_note": "Gray Zone % (Z3/tempo) - minimize in polarized training",
@@ -221,7 +303,8 @@
       "z2_pct": 15.3,
       "z3_pct": 19.0,
       "polarization_index": 1.91,
-      "classification": "Pyramidal"
+      "classification": "Pyramidal",
+      "zone_basis": "mixed"
     },
     "seiler_tid_7d_primary": {
       "z1_seconds": 19720,
@@ -232,6 +315,7 @@
       "z3_pct": 10.3,
       "polarization_index": null,
       "classification": "Pyramidal",
+      "zone_basis": "power",
       "sport": "run"
     },
     "seiler_tid_28d": {
@@ -242,7 +326,8 @@
       "z2_pct": 13.6,
       "z3_pct": 19.2,
       "polarization_index": 1.98,
-      "classification": "Pyramidal"
+      "classification": "Pyramidal",
+      "zone_basis": "mixed"
     },
     "seiler_tid_28d_primary": {
       "z1_seconds": 54074,
@@ -253,6 +338,7 @@
       "z3_pct": 16.7,
       "polarization_index": 1.86,
       "classification": "Pyramidal",
+      "zone_basis": "power",
       "sport": "run"
     },
     "capability": {
@@ -335,7 +421,7 @@
         "stream_agreement": null
       },
       "previous_phase": null,
-      "phase_duration_weeks": 0,
+      "phase_duration_weeks": 1,
       "dossier_declared": null,
       "dossier_agreement": null
     },
@@ -362,7 +448,7 @@
     "p_max": 694,
     "power_model_source": "wellness.sportInfo",
     "vo2max": 53.0,
-    "calculation_timestamp": "2026-03-16T04:45:03.617626",
+    "calculation_timestamp": "2026-03-16T06:05:04.026145",
     "data_quality": {
       "hrv_data_points": 7,
       "rhr_data_points": 7,
@@ -427,7 +513,8 @@
           "z6_time": 10,
           "z7_time": 0
         }
-      }
+      },
+      "has_intervals": true
     },
     {
       "id": "i132092383",
@@ -480,7 +567,8 @@
           "z6_time": 0,
           "z7_time": 0
         }
-      }
+      },
+      "has_intervals": true
     },
     {
       "id": "i131860949",
@@ -533,7 +621,8 @@
           "z6_time": 601,
           "z7_time": 69
         }
-      }
+      },
+      "has_intervals": true
     },
     {
       "id": "i131660978",
@@ -586,7 +675,8 @@
           "z6_time": 0,
           "z7_time": 0
         }
-      }
+      },
+      "has_intervals": true
     },
     {
       "id": "i131635120",
@@ -639,7 +729,8 @@
           "z6_time": 278,
           "z7_time": 23
         }
-      }
+      },
+      "has_intervals": true
     },
     {
       "id": "i131387842",
@@ -692,7 +783,8 @@
           "z6_time": 4,
           "z7_time": 0
         }
-      }
+      },
+      "has_intervals": true
     },
     {
       "id": "i131197205",
@@ -745,7 +837,8 @@
           "z6_time": 0,
           "z7_time": 0
         }
-      }
+      },
+      "has_intervals": true
     },
     {
       "id": "i131120007",
@@ -798,7 +891,8 @@
           "z6_time": 289,
           "z7_time": 22
         }
-      }
+      },
+      "has_intervals": true
     },
     {
       "id": "i130910390",
@@ -842,7 +936,8 @@
           "z6_time": 0,
           "z7_time": 0
         }
-      }
+      },
+      "has_intervals": true
     },
     {
       "id": "i130849404",
@@ -895,7 +990,8 @@
           "z6_time": 27,
           "z7_time": 0
         }
-      }
+      },
+      "has_intervals": true
     }
   ],
   "wellness_data": [
@@ -910,10 +1006,33 @@
       "sleep_quality": 1,
       "sleep_score": 91.0,
       "mental_energy": null,
+      "avg_sleeping_hr": null,
+      "vo2max": 54.0,
       "fatigue": null,
       "soreness": null,
-      "avg_sleeping_hr": null,
-      "vo2max": 54.0
+      "stress": null,
+      "mood": null,
+      "motivation": null,
+      "injury": null,
+      "hydration": null,
+      "spO2": null,
+      "blood_glucose": null,
+      "systolic": null,
+      "diastolic": null,
+      "baevsky_si": null,
+      "lactate": null,
+      "respiration": null,
+      "body_fat_pct": null,
+      "abdomen_cm": null,
+      "steps": 19006,
+      "hydration_volume_l": null,
+      "kcal_consumed": null,
+      "carbohydrates_g": null,
+      "protein_g": null,
+      "fat_g": null,
+      "menstrual_phase": null,
+      "menstrual_phase_predicted": null,
+      "readiness": null
     },
     {
       "date": "2026-03-11",
@@ -926,10 +1045,33 @@
       "sleep_quality": 3,
       "sleep_score": 74.0,
       "mental_energy": null,
+      "avg_sleeping_hr": null,
+      "vo2max": null,
       "fatigue": null,
       "soreness": null,
-      "avg_sleeping_hr": null,
-      "vo2max": null
+      "stress": null,
+      "mood": null,
+      "motivation": null,
+      "injury": null,
+      "hydration": null,
+      "spO2": null,
+      "blood_glucose": null,
+      "systolic": null,
+      "diastolic": null,
+      "baevsky_si": null,
+      "lactate": null,
+      "respiration": null,
+      "body_fat_pct": null,
+      "abdomen_cm": null,
+      "steps": 14817,
+      "hydration_volume_l": null,
+      "kcal_consumed": null,
+      "carbohydrates_g": null,
+      "protein_g": null,
+      "fat_g": null,
+      "menstrual_phase": null,
+      "menstrual_phase_predicted": null,
+      "readiness": null
     },
     {
       "date": "2026-03-12",
@@ -942,10 +1084,33 @@
       "sleep_quality": 2,
       "sleep_score": 85.0,
       "mental_energy": null,
+      "avg_sleeping_hr": null,
+      "vo2max": 55.0,
       "fatigue": null,
       "soreness": null,
-      "avg_sleeping_hr": null,
-      "vo2max": 55.0
+      "stress": null,
+      "mood": null,
+      "motivation": null,
+      "injury": null,
+      "hydration": null,
+      "spO2": null,
+      "blood_glucose": null,
+      "systolic": null,
+      "diastolic": null,
+      "baevsky_si": null,
+      "lactate": null,
+      "respiration": null,
+      "body_fat_pct": null,
+      "abdomen_cm": null,
+      "steps": 14475,
+      "hydration_volume_l": null,
+      "kcal_consumed": null,
+      "carbohydrates_g": null,
+      "protein_g": null,
+      "fat_g": null,
+      "menstrual_phase": null,
+      "menstrual_phase_predicted": null,
+      "readiness": null
     },
     {
       "date": "2026-03-13",
@@ -958,10 +1123,33 @@
       "sleep_quality": 2,
       "sleep_score": 84.0,
       "mental_energy": null,
+      "avg_sleeping_hr": null,
+      "vo2max": null,
       "fatigue": null,
       "soreness": null,
-      "avg_sleeping_hr": null,
-      "vo2max": null
+      "stress": null,
+      "mood": null,
+      "motivation": null,
+      "injury": null,
+      "hydration": null,
+      "spO2": null,
+      "blood_glucose": null,
+      "systolic": null,
+      "diastolic": null,
+      "baevsky_si": null,
+      "lactate": null,
+      "respiration": null,
+      "body_fat_pct": null,
+      "abdomen_cm": null,
+      "steps": 14341,
+      "hydration_volume_l": null,
+      "kcal_consumed": null,
+      "carbohydrates_g": null,
+      "protein_g": null,
+      "fat_g": null,
+      "menstrual_phase": null,
+      "menstrual_phase_predicted": null,
+      "readiness": null
     },
     {
       "date": "2026-03-14",
@@ -974,10 +1162,33 @@
       "sleep_quality": 2,
       "sleep_score": 82.0,
       "mental_energy": null,
+      "avg_sleeping_hr": null,
+      "vo2max": null,
       "fatigue": null,
       "soreness": null,
-      "avg_sleeping_hr": null,
-      "vo2max": null
+      "stress": null,
+      "mood": null,
+      "motivation": null,
+      "injury": null,
+      "hydration": null,
+      "spO2": null,
+      "blood_glucose": null,
+      "systolic": null,
+      "diastolic": null,
+      "baevsky_si": null,
+      "lactate": null,
+      "respiration": null,
+      "body_fat_pct": null,
+      "abdomen_cm": null,
+      "steps": 2891,
+      "hydration_volume_l": null,
+      "kcal_consumed": null,
+      "carbohydrates_g": null,
+      "protein_g": null,
+      "fat_g": null,
+      "menstrual_phase": null,
+      "menstrual_phase_predicted": null,
+      "readiness": null
     },
     {
       "date": "2026-03-15",
@@ -990,10 +1201,33 @@
       "sleep_quality": 2,
       "sleep_score": 80.0,
       "mental_energy": null,
+      "avg_sleeping_hr": null,
+      "vo2max": 55.0,
       "fatigue": null,
       "soreness": null,
-      "avg_sleeping_hr": null,
-      "vo2max": 55.0
+      "stress": null,
+      "mood": null,
+      "motivation": null,
+      "injury": null,
+      "hydration": null,
+      "spO2": null,
+      "blood_glucose": null,
+      "systolic": null,
+      "diastolic": null,
+      "baevsky_si": null,
+      "lactate": null,
+      "respiration": null,
+      "body_fat_pct": null,
+      "abdomen_cm": null,
+      "steps": 26601,
+      "hydration_volume_l": null,
+      "kcal_consumed": null,
+      "carbohydrates_g": null,
+      "protein_g": null,
+      "fat_g": null,
+      "menstrual_phase": null,
+      "menstrual_phase_predicted": null,
+      "readiness": null
     },
     {
       "date": "2026-03-16",
@@ -1006,10 +1240,33 @@
       "sleep_quality": 1,
       "sleep_score": 91.0,
       "mental_energy": null,
+      "avg_sleeping_hr": null,
+      "vo2max": 53.0,
       "fatigue": null,
       "soreness": null,
-      "avg_sleeping_hr": null,
-      "vo2max": 53.0
+      "stress": null,
+      "mood": null,
+      "motivation": null,
+      "injury": null,
+      "hydration": null,
+      "spO2": null,
+      "blood_glucose": null,
+      "systolic": null,
+      "diastolic": null,
+      "baevsky_si": null,
+      "lactate": null,
+      "respiration": null,
+      "body_fat_pct": null,
+      "abdomen_cm": null,
+      "steps": 55,
+      "hydration_volume_l": null,
+      "kcal_consumed": null,
+      "carbohydrates_g": null,
+      "protein_g": null,
+      "fat_g": null,
+      "menstrual_phase": null,
+      "menstrual_phase_predicted": null,
+      "readiness": null
     }
   ],
   "planned_workouts": [
@@ -1018,6 +1275,7 @@
       "date": "2026-03-16",
       "name": "Run: Recovery + Strides",
       "type": "WORKOUT",
+      "sport_type": "Run",
       "planned_tss": null,
       "duration_hours": 1.08,
       "duration_formatted": "1h5m",
@@ -1029,6 +1287,7 @@
       "date": "2026-03-16",
       "name": "Strength: Strength",
       "type": "WORKOUT",
+      "sport_type": "WeightTraining",
       "planned_tss": null,
       "duration_hours": 0.83,
       "duration_formatted": "50m",
@@ -1040,6 +1299,7 @@
       "date": "2026-03-17",
       "name": "Run: Quality 3 x 15",
       "type": "WORKOUT",
+      "sport_type": "Run",
       "planned_tss": null,
       "duration_hours": 1.32,
       "duration_formatted": "1h19m",
@@ -1051,6 +1311,7 @@
       "date": "2026-03-18",
       "name": "Bike: THC",
       "type": "WORKOUT",
+      "sport_type": "Ride",
       "planned_tss": null,
       "duration_hours": 2.0,
       "duration_formatted": "2h",
@@ -1062,6 +1323,7 @@
       "date": "2026-03-18",
       "name": "Strength: Strength",
       "type": "WORKOUT",
+      "sport_type": "WeightTraining",
       "planned_tss": null,
       "duration_hours": 0.83,
       "duration_formatted": "50m",
@@ -1073,6 +1335,7 @@
       "date": "2026-03-18",
       "name": "Run: Easy",
       "type": "WORKOUT",
+      "sport_type": "Run",
       "planned_tss": null,
       "duration_hours": 0.83,
       "duration_formatted": "50m",
@@ -1084,6 +1347,7 @@
       "date": "2026-03-19",
       "name": "Run: Quality 3 x 12",
       "type": "WORKOUT",
+      "sport_type": "Run",
       "planned_tss": null,
       "duration_hours": 1.15,
       "duration_formatted": "1h9m",
@@ -1095,6 +1359,7 @@
       "date": "2026-03-20",
       "name": "Bike: THC - Coffee",
       "type": "WORKOUT",
+      "sport_type": "Ride",
       "planned_tss": null,
       "duration_hours": 1.83,
       "duration_formatted": "1h50m",
@@ -1106,6 +1371,7 @@
       "date": "2026-03-20",
       "name": "Run: Easy",
       "type": "WORKOUT",
+      "sport_type": "Run",
       "planned_tss": null,
       "duration_hours": 0.83,
       "duration_formatted": "50m",
@@ -1117,6 +1383,7 @@
       "date": "2026-03-21",
       "name": "Run: Quality 10 x 3",
       "type": "WORKOUT",
+      "sport_type": "Run",
       "planned_tss": null,
       "duration_hours": 1.17,
       "duration_formatted": "1h10m",
@@ -1128,6 +1395,7 @@
       "date": "2026-03-22",
       "name": "Run: Long Run",
       "type": "WORKOUT",
+      "sport_type": "Run",
       "planned_tss": null,
       "duration_hours": 2.5,
       "duration_formatted": "2h30m",
@@ -1139,6 +1407,7 @@
       "date": "2026-03-23",
       "name": "Strength: Strength",
       "type": "WORKOUT",
+      "sport_type": "WeightTraining",
       "planned_tss": null,
       "duration_hours": 0.83,
       "duration_formatted": "50m",
@@ -1150,6 +1419,7 @@
       "date": "2026-03-23",
       "name": "Run: Recovery",
       "type": "WORKOUT",
+      "sport_type": "Run",
       "planned_tss": null,
       "duration_hours": 0.5,
       "duration_formatted": "30m",
@@ -1161,6 +1431,7 @@
       "date": "2026-03-24",
       "name": "Run: Quality 2 x 12",
       "type": "WORKOUT",
+      "sport_type": "Run",
       "planned_tss": null,
       "duration_hours": 0.93,
       "duration_formatted": "56m",
@@ -1172,6 +1443,7 @@
       "date": "2026-03-25",
       "name": "Bike: THC",
       "type": "WORKOUT",
+      "sport_type": "Ride",
       "planned_tss": null,
       "duration_hours": 2.0,
       "duration_formatted": "2h",
@@ -1183,6 +1455,7 @@
       "date": "2026-03-25",
       "name": "Strength: Strength",
       "type": "WORKOUT",
+      "sport_type": "WeightTraining",
       "planned_tss": null,
       "duration_hours": 0.83,
       "duration_formatted": "50m",
@@ -1194,6 +1467,7 @@
       "date": "2026-03-25",
       "name": "Run: Easy",
       "type": "WORKOUT",
+      "sport_type": "Run",
       "planned_tss": null,
       "duration_hours": 0.67,
       "duration_formatted": "40m",
@@ -1205,6 +1479,7 @@
       "date": "2026-03-26",
       "name": "Run: Quality 3 x 6",
       "type": "WORKOUT",
+      "sport_type": "Run",
       "planned_tss": null,
       "duration_hours": 0.85,
       "duration_formatted": "51m",
@@ -1216,6 +1491,7 @@
       "date": "2026-03-27",
       "name": "Bike: THC - Coffee",
       "type": "WORKOUT",
+      "sport_type": "Ride",
       "planned_tss": null,
       "duration_hours": 1.83,
       "duration_formatted": "1h50m",
@@ -1227,6 +1503,7 @@
       "date": "2026-03-27",
       "name": "Run: Easy",
       "type": "WORKOUT",
+      "sport_type": "Run",
       "planned_tss": null,
       "duration_hours": 0.67,
       "duration_formatted": "40m",
@@ -1238,6 +1515,7 @@
       "date": "2026-03-28",
       "name": "Run: Hill Sprints",
       "type": "WORKOUT",
+      "sport_type": "Run",
       "planned_tss": null,
       "duration_hours": 0.83,
       "duration_formatted": "50m",
@@ -1249,6 +1527,7 @@
       "date": "2026-03-29",
       "name": "Run: Long Run",
       "type": "WORKOUT",
+      "sport_type": "Run",
       "planned_tss": null,
       "duration_hours": 2.25,
       "duration_formatted": "2h15m",
