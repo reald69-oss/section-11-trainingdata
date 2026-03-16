@@ -324,13 +324,15 @@ This document serves as a reference template for endurance athletes using the de
 
 **Repo:** `[username]/[repo]` (connected via platform's GitHub integration — AI reads files directly, no URLs needed)
 
-> **Tip:** If you commit `DOSSIER.md` to your data repo alongside `latest.json` and `history.json`, connecting the repo gives the AI both your data and your profile in one connection. The only remaining piece is `SECTION_11.md`, which the AI can fetch from the public CrankAddict/section-11 repo or a second connector.
+> **Tip:** If you commit `DOSSIER.md` to your data repo alongside `latest.json`, `history.json`, and `intervals.json`, connecting the repo gives the AI both your data and your profile in one connection. The only remaining piece is `SECTION_11.md`, which the AI can fetch from the public CrankAddict/section-11 repo or a second connector.
 
 **— OR (local setup) —**
 
 **Path:** `latest.json` (data directory root, alongside this dossier)
 
 **History:** `history.json` (data directory root)
+
+**Intervals:** `intervals.json` (data directory root — on-demand, for structured session analysis)
 
 **Data Path (optional):** `[/path/to/training-data/]`
 Only needed if the AI agent's working directory is different from where data files live (e.g., OpenClaw workspace is `~/clawd/` but data is in `~/training-data/`). Leave blank if they are the same directory.
