@@ -12,6 +12,7 @@ Weather ([Location]): [icon] [temp]°C, [humidity]% humidity, [conditions], wind
 Coach note: [Brief weather-relevant tip. Omit if no actionable weather context.]
 
 Current Status Summary:
+Phase: [phase_detection.phase] Wk[phase_detection.phase_duration_weeks]
 RHR: [XX] bpm (baseline: [XX] bpm)
 HRV: [XX] ms (7d avg: [XX] ms)
 Sleep: [XhYm]
@@ -55,8 +56,9 @@ AI may override the pre-computed recommendation with explicit rationale.]
 
 | Field | Rule |
 |-------|------|
+| Phase | Include only when `phase_detection.confidence` is "high" or "medium". Omit when "low" or phase is null |
 | Weather | Include if athlete location is available via profile or memory |
-| Coach note (weather) | Include only if actionable (e.g., dress warm, indoor day) |
+| Coach note (weather) | Include only if actionable (e.g., dress warm, indoor day). When forecast triggers heat stress Tier 1+: Tier 1 — note hydration emphasis. Tier 2 — specify session modification per Environmental Conditions Protocol session-type rules (e.g., "Threshold intervals planned — keep power targets, consider reducing from 4×8min to 3×8min"). Tier 3 — recommend reschedule or endurance-only. See **Environmental Conditions Protocol** in SECTION_11.md for tier definitions and session-type rules. |
 | Monotony | Include **only** if > 2.3. Omit entirely when normal |
 | Durability | Include if qualifying sessions exist. Omit if 0 qualifying sessions in 7d |
 | EF | Include if qualifying sessions exist. Omit if 0 qualifying sessions in 7d |

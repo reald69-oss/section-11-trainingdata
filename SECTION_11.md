@@ -1,10 +1,26 @@
 # Section 11 — AI Coach Protocol
 
-**Protocol Version:** 11.16  
-**Last Updated:** 2026-03-15
+**Protocol Version:** 11.18  
+**Last Updated:** 2026-03-19
 **License:** [MIT](https://opensource.org/licenses/MIT)
 
 ### Changelog
+
+**v11.18 — Environmental Conditions Protocol:**
+- New section: delta-based heat stress tiers (relative to athlete's 14-day thermal baseline), absolute guardrails, insufficient-baseline fallback
+- Session-type modification rules: endurance (HR ceiling), threshold/SS (keep power, cut volume), VO₂max (keep targets, cut sets), long rides (power pacing, HR abort)
+- Heat acclimatization timeline, decay guidance, indoor heat interpretation, cardiac drift contextualization
+- Cross-references added to *3 Metabolic & Environmental Progression and Durability Sub-Metrics diagnostic
+- Evidence table updated (Tatterson, Tucker, Racinais, Périard, Hettinga, Ely, Steadman)
+- Template additions: heat-specific coach notes in pre/post-workout reports
+- Cold weather subsection: warm-up extension, bronchospasm risk, wind chill safety, cold power meter lag
+
+**v11.17 — Phase Context + Tomorrow Preview in Report Templates:**
+- Phase line added to pre-workout (Current Status Summary) and post-workout (Weekly totals) — first line, frames all metrics below
+- Conditional: include only when `phase_detection.confidence` is "high" or "medium"; omit when "low" or null
+- Tomorrow preview added to post-workout: next planned session after interpretation. Conditional: omit when no session planned
+- Session profile field documented in post-workout Field Notes table
+- Pre/post-workout "must include" lists updated in protocol
 
 **v11.16 — Wellness Field Expansion:**
 - All Intervals.icu wellness fields now passed through: subjective state (stress, mood, motivation, injury, fatigue, soreness, hydration), vitals (spO2, blood glucose, blood pressure, Baevsky SI, lactate, respiration), body composition (body fat, abdomen), nutrition (kcal, carbs, protein, fat), lifestyle (steps, hydration volume), cycle tracking (menstrual phase + predicted)
@@ -50,48 +66,10 @@
 - Phase timeline added to block report template
 - References: Fecchio et al. (2019) HRR reproducibility; Lamberts et al. (2024) cyclist HRR reliability; Buchheit (2006)
 
-**v11.11 — Phase Detection v2 (Dual-Stream Architecture):**
-- Phase detection rewritten from single-point snapshot to dual-stream architecture
-- Stream 1 (retrospective): 4-week lookback from `weekly_180d` — CTL slope, ACWR trend, hard-day density, monotony
-- Stream 2 (prospective): planned workouts + race calendar — planned TSS delta, race proximity, plan coverage
-- 8 phase states: Build, Base, Peak, Taper, **Deload** (new), Recovery, Overreached, null
-- Classification priority: Overreached → Taper → Peak → Deload → Build/Base (scored) → Recovery → null
-- Confidence model (high/medium/low) based on signal strength, data quality, stream agreement
-- Hysteresis: bias toward previous phase when scores are close, prevents phase flapping
-- Reason codes for full auditability (e.g., `RACE_IMMINENT_VOLUME_REDUCING`, `PLAN_GAP_NEXT_WEEK`)
-- `phase_detection` output object with basis, confidence, reason_codes; backward-compat `phase_detected`/`phase_triggers` preserved
-- Overreached fix: requires current-week ACWR >1.5 (not historical max); monotony threshold raised 2.0→2.5
-- Weekly tier enriched: `acwr`, `monotony` (5+ day guard), `intensity_basis_breakdown`, `phase_detected` per row
-- Old `_detect_phase` function removed
-
-**v11.10 — Hard Day HR Zone Fallback:**
-- Hard day counter now falls back to HR zones (`icu_hr_zone_times`) when power zones unavailable
-- Running, SkiErg, rowing sessions were invisible to phase detection — fixed
-- Conservative 2-rung HR ladder (Z4+ ≥ 10min, Z5+ ≥ 5min) per Seiler 3-zone model; power ladder unchanged
-- Shared `_get_activity_zones()` and `_classify_hard_day()` helpers across all call sites
-- Daily tier rows now include `intensity_basis` field (power/hr/mixed/null)
-- `is_hard_day` returns `null` when no zone data exists (not `false`)
-- `hard_days_this_week` field type updated to `number/null`
-- Workout Reference hard session definition (§3.1) updated with both ladders
-
-**v11.9 — Efficiency Factor Tracking:**
-- Added Efficiency Factor (EF = NP ÷ Avg HR, Coggan) to Validated Optional Metrics
-- EF pulled from Intervals.icu API (`icu_efficiency_factor`), aggregated 7d/28d in capability namespace
-- Qualifying filters: cycling, VI ≤ 1.05, ≥ 20min, power+HR data
-- Trend detection: improving/stable/declining (±0.03 threshold)
-- Report templates updated: per-session in post-workout, aggregate in weekly/block/pre-workout
-
-**v11.8 — Per-Sport Threshold Schema:**
-- Added Per-Sport Threshold Schema defining `thresholds.sports` as a map keyed by sport family
-- Thresholds (LTHR, max HR, FTP, threshold pace) are now sport-isolated; cross-sport application is forbidden
-- Field semantics: `ftp` = primary threshold power for sport, `ftp_indoor` = indoor variant (if applicable)
-- Sentinel rules: `threshold_pace = 0` normalizes to null; null pace requires null `pace_units`
-- Fallback rule: missing sport family → skip threshold-dependent checks, flag explicitly
-- Deterministic collision resolution for duplicate sport family mappings
-- FTP Governance clarified as cycling-specific; Benchmark Index uses `thresholds.sports.cycling.ftp`
-- Zone Distribution now requires sport-matched threshold lookup
-- Validation Checklist item 1 updated for sport-family lookup
-- Global estimates (`eftp`, `w_prime`, `w_prime_kj`, `p_max`, `vo2max`) remain at top level
+**v11.11** — Phase Detection v2: dual-stream architecture (retrospective + prospective), 8 phase states, confidence model, hysteresis, reason codes  
+**v11.10** — Hard day HR zone fallback for non-power sports (running, SkiErg, rowing); shared zone helpers  
+**v11.9** — Efficiency Factor (EF = NP ÷ Avg HR) tracking with 7d/28d aggregation and trend detection  
+**v11.8** — Per-Sport Threshold Schema: sport-isolated thresholds, cross-sport application forbidden, global estimates at top level
 
 **v11.7** — Workout Reference Library integration (26 templates, v0.5.0), selection rules, sequencing enforcement, WU/CD mandates, audit traceability via `session_template` field  
 **v11.6** — Race-Week Protocol (D-7 to D-0), three-layer race awareness (calendar → taper onset → race week), event-type modifiers, go/no-go checklist, RACE_A/B/C priority detection via Intervals.icu  
@@ -335,6 +313,7 @@ All AI analyses, interpretations, and recommendations must be grounded in valida
 |   Maunder et al. (2021)                                     | Defined "durability" as resistance to deterioration in physiological profiling during prolonged exercise                       |
 |   Rothschild & Maunder (2025)                               | Validated HR and power decoupling as field-based durability predictors in endurance athletes                                  |
 |   Smyth (2022)                                              | Cardiac drift analysis across 82,303 marathon performances; validated decoupling as durability marker at scale                |
+|   Racinais et al. (2015); Périard et al. (2015) — Heat consensus | Heat acclimatization, environmental performance decrements, session modification in heat                                  |
 
 ---
 
@@ -1035,6 +1014,8 @@ Once duration and interval stability confirmed, controlled metabolic or thermore
 - Exposures must not exceed one per 7–10 days
 - Additional exposures require RI ≥ 0.85 and HRV within 10% of baseline
 
+See **Environmental Conditions Protocol** for temperature-based session modification rules and acclimatization guidance.
+
 ---
 
 ### Regression Rule (Safety Check)
@@ -1093,6 +1074,188 @@ The following thresholds apply to wellness-level Feel. If Feel is present in the
 Daily metrics synchronised through data hierarchy and mirrored in JSON dataset each morning. AI-coach systems must reference latest values before prescribing or validating any session.
 
 If HRV unavailable, Sleep quality substitutes as primary subjective readiness indicator.
+
+---
+
+### Environmental Conditions Protocol
+
+**Purpose:** Provide data-driven environmental training modification rules when athletes exercise in heat stress conditions. No `sync.py` changes — the AI layer interprets existing temperature and humidity fields (`avg_temp`, `humidity`, `weather`, `wind_speed` per activity) and fetched forecast data.
+
+#### Heat Stress Assessment
+
+Heat stress is **relative to the athlete's recent thermal exposure**, not absolute temperature. A rider acclimatized to 30°C in Valencia experiences different physiological strain at 33°C than a rider emerging from a Danish winter at 8°C.
+
+**Thermal Baseline:** Rolling mean `avg_temp` from qualifying outdoor activities over the most recent 14 days. Indoor activities and activities without temperature data are excluded. The 14-day window aligns with the heat acclimatization timeline — physiological adaptation is ~75% complete within 7 days and fully established at 10–14 days (Périard et al. 2015). A longer window would dilute recent climate transitions.
+
+**Heat Stress Tiers (delta-based):**
+
+| Tier | Delta Above Baseline | Modification Level | Expected Cardiac Drift |
+|------|---------------------|--------------------|----------------------|
+| Tier 1 — Moderate | +5–8°C above 14d baseline | Awareness; hydration emphasis | 5–10% HR elevation at same power *(estimated, extrapolated from literature)* |
+| Tier 2 — High | +8–12°C above 14d baseline | Active session modification | 10–15%+ HR elevation at same power *(Racinais et al. 2015: −0.5%/°C power decrement)* |
+| Tier 3 — Extreme | +12°C+ above 14d baseline | Endurance only or reschedule | 15–20%+ HR elevation *(study range: 13–19% at 35°C/60% VO₂max)* |
+
+**Absolute guardrails:**
+- **Floor:** No heat stress flag below 15°C apparent temperature, regardless of delta. Cold-to-mild transitions are not heat events.
+- **Ceiling:** Above 38°C apparent temperature, all athletes are Tier 3 regardless of acclimatization status or baseline.
+
+**Insufficient baseline fallback:** When fewer than 3 qualifying outdoor activities exist in the 14-day window, the delta calculation cannot produce a reliable baseline. Fall back to absolute thresholds based on thermoneutral reference (~15–20°C from the literature):
+
+| Apparent Temp | Fallback Tier |
+|---------------|---------------|
+| 25–30°C | Tier 1 minimum |
+| 30–35°C | Tier 2 |
+| >35°C | Tier 3 |
+
+These absolute thresholds are conservative — they assume no acclimatization, which is correct for an athlete emerging from indoor training. Once 3+ outdoor activities accumulate in the 14-day window, the delta system takes over.
+
+**Tier boundary honesty:** The delta breakpoints (+5–8, +8–12, +12+) are practical heuristics informed by the acclimatization and performance decrement literature, not directly cited thresholds from a single study. The underlying science establishes that acclimatization status determines heat tolerance (Périard et al. 2015, Racinais et al. 2015) and that performance decrements scale at approximately −0.5% per °C (Racinais et al. 2015). The specific tier cutoffs are engineering applied to that evidence.
+
+**Apparent temperature hierarchy:** Use the best available measurement, in order:
+1. WBGT (Wet Bulb Globe Temperature) — gold standard, requires specialized equipment, rarely available
+2. Heat index (air temperature + relative humidity; Steadman 1979) — practical field standard, computed by the AI from `avg_temp` and `humidity` when both are present
+3. Raw air temperature — when humidity is unavailable, shift tier boundaries down by ~2°C to compensate for unknown humidity contribution
+
+When humidity is available, use it. When it's not, work without it. Consistent with Section 11's general data philosophy.
+
+**Temperature trend detection:** The AI should detect thermal transitions by comparing recent `avg_temp` values against the 14-day baseline in `history.json`. Key transition scenarios:
+- First week of outdoor riding after winter indoor training
+- Sudden heatwave (multi-day temperature spike above baseline)
+- Travel to a warmer climate (training camp, race travel)
+- Return from warm climate to cool (acclimatization decay — see below)
+
+These transitions represent the highest-risk periods for heat-related performance problems and should trigger proactive coaching notes.
+
+#### Performance Expectations in Heat
+
+Quantified decrements so the AI does not flag normal heat-related performance changes as underperformance or fitness regression:
+
+| Condition | Expected Decrement | Source |
+|-----------|-------------------|--------|
+| Cycling 30-min TT at 32°C vs 23°C | −6.5% power output (345W → 323W) | Tatterson et al. (2000) |
+| Cycling 20km TT at 35°C vs 15°C | −6.3% power output | Tucker et al. (2004) |
+| Cycling TT, unacclimatized, first heat exposure | Up to −16% power output | Racinais et al. (2015) |
+| Scaling per degree | ~−0.5% per °C above thermoneutral | Racinais et al. (2015) |
+| Gross efficiency in heat | −0.9% (accounts for ~half of TT performance loss) | Hettinga et al. (2007) |
+| Marathon at WBGT 25°C, elite runners | ~3% slower | Ely et al. (2007) |
+| Marathon at WBGT 25°C, 3-hour runners | ~12% slower | Ely et al. (2007) |
+| Optimal endurance performance temperature | 10–15°C air temp / 7.5–15°C WBGT | Ely et al. (2007); multiple |
+
+**Anticipatory pacing in heat:** Tatterson et al. (2000) demonstrated that power reduction in heat is *anticipatory* — athletes self-select lower output before core temperature rises significantly. Rectal temperature was similar between hot and cool trials despite substantial power differences. This is the body's protective thermoregulatory mechanism operating correctly. The AI must not interpret heat-related power drops as "athlete didn't try hard enough" or "pacing failure."
+
+**Athlete ability matters:** Slower/less fit athletes experience larger heat-related performance decrements than elites (Ely et al. 2007). Section 11 serves a range of athletes — the AI should scale expectations accordingly and avoid applying elite-derived benchmarks to recreational athletes.
+
+#### Session-Type Modification Rules
+
+Heat does not require a binary switch from power-primary to HR-primary intensity guidance. The correct approach is **session-type dependent**. The principle: **HR is the safety ceiling, power is the training stimulus. Heat lowers the ceiling, which constrains achievable volume. The primary lever is volume reduction, not intensity reduction.**
+
+**Endurance / Z2 sessions:** HR ceiling approach. Cap HR at the athlete's normal Z2 ceiling and let power float downward. The aerobic stimulus is preserved because systemic cardiovascular stress — not muscular power output — is the actual target at this intensity. If power drops >15% below normal Z2 power while maintaining the HR ceiling, the session is still achieving its physiological goal.
+
+**Threshold / Sweetspot intervals:** Keep power targets. 260W stimulates the same muscular adaptations regardless of ambient temperature. Accept higher HR at the same power output. The primary adjustment lever is **volume reduction**: fewer intervals (e.g. 3×8min instead of 4×8min), not lower interval power. Reducing interval power to control HR defeats the session's purpose — the muscular stimulus is the point. If HR reaches threshold-level values during sub-threshold work, that is an abort signal — end the session or extend recovery between intervals significantly.
+
+**VO₂max / short intervals (30/15s, 30/30s, Tabata-style):** Heat drift is negligible in efforts ≤30 seconds. Keep power targets unchanged. If accumulated heat stress builds across the session (evidenced by rising baseline HR between work bouts or RPE creep at constant power), cut a set rather than reducing interval intensity. Recovery intervals between sets may need extension.
+
+**Long rides (3h+):** Power is more reliable than HR for pacing. As core temperature rises progressively over hours, HR keeps climbing at constant effort — making HR an increasingly unreliable pacing guide. Use power for pacing. HR functions as an **abort signal**: if HR reaches threshold-level at endurance power, the ride must stop or intensity must drop to recovery level. This is a safety boundary, not a pacing tool.
+
+**Summary table:**
+
+| Session Type | Power Targets | HR Role | Primary Adjustment |
+|-------------|---------------|---------|-------------------|
+| Endurance / Z2 | Float down | Ceiling (cap at Z2 HR) | Power reduction accepted |
+| Threshold / SS intervals | Keep | Monitor (accept elevation) | Cut volume (fewer intervals) |
+| VO₂max / short intervals | Keep | Monitor between sets | Cut sets if baseline HR rising |
+| Long rides (3h+) | Keep for pacing | Abort signal only | Stop or drop to recovery if HR at threshold |
+
+#### Heat Acclimatization
+
+Evidence-based adaptation timeline for athletes entering heat:
+
+**Adaptation kinetics (Périard et al. 2015; Racinais et al. 2015 consensus):**
+- Days 1–3: Plasma volume expansion begins, initial HR reduction
+- Days 3–6: Cardiovascular adaptations measurable (reduced exercising HR, improved cardiac output stability)
+- Days 5–7: ~75% of major physiological adaptations achieved
+- Days 5–14: Sweat rate increases, thermoregulatory improvements, sweat electrolyte concentration decreases
+- Days 10–14: Full adaptation, including complete sweating and skin blood flow responses
+
+**Protocol for entering heat:**
+- Sessions ≥60 minutes per day in heat, sufficient to elevate core and skin temperature and stimulate sweating (Racinais et al. 2015 consensus)
+- Does not require high intensity — Z2 endurance in heat provides adequate thermal stimulus
+- First 3–5 days: Do not schedule quality sessions (threshold, VO₂max). Prioritize endurance work to build heat tolerance without compounding muscular fatigue
+- First week: Reduce training volume 25–40% relative to temperate training load
+- Days 5–7 onward: Gradually reintroduce structured intensity
+- Days 10–14: Full training load in heat
+- Consistent with Section 9, *3 Metabolic & Environmental Progression: only one progression variable modified per week. Do not combine first heat exposure with altitude training, fasted sessions, or a volume increase
+
+**Acclimatization decay:**
+- Adaptations begin declining within days of returning to temperate conditions
+- Significant decay after approximately 1 week without heat exposure
+- Scenario: athlete returns from a 10-day warm-weather training camp to cool home conditions. The AI should note that heat tolerance is fading, which is relevant if a warm-weather event is upcoming. Intermittent heat exposure (e.g. indoor heat sessions) can slow decay
+- Decay is relevant even in the "positive" direction — an athlete acclimatized to heat who races in cool conditions may experience perceived ease due to reduced thermoregulatory demand. This is expected, not a sign of sudden fitness improvement
+
+**Altitude + heat:** Training camps at altitude in warm locations (Mallorca, Tenerife, Gran Canaria) combine two environmental stressors. Per Section 9, *3 progression rules: one variable at a time. If both are present simultaneously, prioritize heat acclimatization (more immediate health risk) and accept reduced training quality for the altitude adaptation.
+
+#### Indoor Heat
+
+Indoor training without adequate cooling is likely the most common heat stress scenario for Section 11 users. A garage, apartment, or pain cave without air conditioning and limited airflow can produce heat stress conditions at temperatures that would be comfortable outdoors.
+
+**Why indoor heat is different:** Outdoor cycling at 25+ km/h generates substantial convective cooling (airflow over the skin). Indoor training on a stationary trainer eliminates this. Additionally, humidity builds in enclosed spaces as the athlete sweats, compounding the thermal load. A 28°C indoor environment with no fan produces greater physiological strain than 30°C outdoors on the bike.
+
+**Fan as primary mitigation:** Research consistently shows that fan airflow (~4.5 m/s) significantly attenuates cardiovascular drift during indoor exercise. A strong fan directed at the torso is the single most effective indoor heat countermeasure. This is a practical coaching recommendation, not a protocol prescription.
+
+**Session modification:** The same session-type rules in the previous subsection apply to indoor heat. The AI uses `avg_temp` from the activity payload (indoor rides record temperature via device sensors or room sensors) to assess post-ride heat context. When `avg_temp` exceeds 25°C on an indoor activity, the AI should factor heat stress into its interpretation of power, HR, decoupling, and RPE data.
+
+**"Move indoors" is not always a heat mitigation.** The pre-workout template guidance should not default to "consider moving indoors" as a heat avoidance strategy without considering whether the indoor environment is actually cooler. The recommendation should be: move to a **cooler** environment, which may be indoors with AC/fan or outdoors at a cooler time of day.
+
+#### Cardiac Drift and Decoupling in Heat
+
+The existing diagnostic logic in Durability Sub-Metrics states: "Normal Endurance Decay + High HR–Power Decoupling → Cardiovascular drift; assess hydration, heat, or aerobic base fitness." This section provides the concrete interpretation rules for the heat component.
+
+**When `avg_temp` + `humidity` indicate heat stress (Tier 1+):**
+- Elevated HR–Power decoupling is *expected*. Do not flag as a fitness concern, aerobic base regression, or durability decline
+- Do not recommend additional recovery or load reduction based solely on heat-elevated decoupling
+- Post-ride interpretation should explicitly attribute elevated decoupling to temperature when data supports it: "Decoupling was 7.2% — elevated, but consistent with the 31°C conditions. Not a durability concern."
+
+**Cardiac drift magnitude by tier** *(estimated ranges — see tier boundary honesty note above)*:
+
+| Tier | Expected HR Elevation at Same Power | Expected Power Reduction at Same HR |
+|------|-------------------------------------|-------------------------------------|
+| Tier 1 | 5–10% | 3–5% |
+| Tier 2 | 10–15%+ | 5–10% |
+| Tier 3 | 15–20%+ | 10–16% |
+
+**Seasonal pattern:** Aggregate Durability trends will show apparent "decline" during seasonal warming (spring/summer transition) across the athlete's history. This is a temperature artifact, not a fitness change. The AI must contextualize durability trends with `avg_temp` data from the same period. A rising durability trend during summer is more meaningful than one during winter (it's working against the temperature headwind). A declining trend during the same temperature conditions is genuinely concerning; a declining trend coinciding with a +10°C seasonal shift is expected.
+
+**Interaction with Aggregate Durability metric:** The 90-minute floor and VI ≤ 1.05 session filter for the Aggregate Durability metric remain unchanged. However, when qualifying sessions occur during heat stress conditions, the AI should weight their decoupling values with temperature context rather than treating them as equivalent to thermoneutral sessions. The protocol does not prescribe a mathematical temperature correction — this is an interpretation guidance, not a formula.
+
+#### Cold Weather
+
+Cold weather is a minor environmental modifier. It does not require tiers, session-type modification tables, or acclimatization protocols.
+
+**Extended warm-up below ~5°C:** Muscles are less pliable and power output is reduced until core and peripheral temperature rise. Extend warm-up by 5–10 minutes. Do not evaluate early-session power against targets.
+
+**Bronchospasm risk below ~0°C:** Exercise-induced bronchoconstriction (EIB) is more common in sub-zero air, with higher prevalence in endurance athletes exposed to cold/dry air at high ventilation rates (Rundell et al. 2004, 2013). Flag VO₂max and hard interval sessions below 0°C — consider moving indoors or reducing intensity to avoid sustained high ventilation rates in freezing air.
+
+**Wind chill on long outdoor rides:** Descents, stops, and mechanicals create hypothermia risk when wet and exposed to wind. This is a safety note, not a training modification — the AI should flag it in pre-workout weather coach notes when conditions warrant.
+
+**Power may read low for first 10–15 minutes:** Cold affects both the rider (reduced muscle efficiency) and some power meters (temperature compensation lag). Do not interpret early-ride power shortfall as underperformance.
+
+**No session-type modification rules.** Once warmed up, training proceeds normally in cold. The session itself doesn't change — just the preparation and safety awareness.
+
+#### Environmental Conditions — Evidence Base
+
+| Reference | Finding | Section 11 Application |
+|-----------|---------|----------------------|
+| Tatterson et al. (2000) | 6.5% power reduction at 32°C vs 23°C in elite cyclists; reduction is anticipatory, not core-temp driven | Expected power discount in heat; do not interpret as underperformance |
+| Tucker et al. (2004) | ~6.3% power reduction at 35°C vs 15°C in 20km cycling TT | Corroborates ~0.5% per °C power decrement scaling |
+| Racinais et al. (2015) Med Sci Sports Exerc | −16% power unacclimatized first exposure, ~−0.5%/°C; largely restored after 2-week acclimatization | First heat exposures are worst; acclimatization restores most performance |
+| Racinais et al. (2015) Scand J Med Sci Sports — Consensus | Heat acclimatization: 1–2 weeks, ≥60 min/day, must elevate core/skin temp and stimulate sweating | Acclimatization protocol and timeline |
+| Périard et al. (2015) | ~75% of heat adaptations within 7 days; full at 10–14 days; CV adaptations 3–6 days; sweat adaptations 5–14 days | Concrete adaptation timeline; supports 14-day baseline window |
+| Hettinga et al. (2007) | Gross efficiency drops ~0.9% in 35°C vs 15°C; accounts for approximately half of TT performance loss | Metabolic cost of thermoregulation beyond cardiac drift alone |
+| Ely et al. (2007) | Marathon performance slows progressively above WBGT 5–10°C; slower athletes affected disproportionately | Range-of-ability consideration; scale expectations to athlete level |
+| Steadman (1979) | Heat index formula combining air temperature and relative humidity | Practical alternative to WBGT for field-based heat assessment |
+| Racinais et al. (2023) Br J Sports Med — IOC consensus | Updated IOC recommendations on event regulations in heat; WBGT-based risk classification | Environmental risk classification framework |
+| Montain & Coyle (1992) | Dehydration exacerbates thermal and cardiovascular strain during exercise in heat | Hydration as heat stress modifier |
+| Rundell et al. (2004, 2013) | Higher prevalence of airway hyperresponsiveness and EIB in athletes training in cold/dry air at high ventilation rates; repeated exposure causes airway damage | Flag high-intensity sessions below 0°C; cold weather bronchospasm risk |
 
 ---
 
@@ -1280,7 +1443,7 @@ When Durability Index (DI) drops below 0.95, the following diagnostic metrics he
 
 **Diagnostic Logic:**
 - High Endurance Decay + Normal HR–Power Decoupling → Muscular fatigue; consider fueling or pacing strategy
-- Normal Endurance Decay + High HR–Power Decoupling → Cardiovascular drift; assess hydration, heat, or aerobic base fitness
+- Normal Endurance Decay + High HR–Power Decoupling → Cardiovascular drift; assess hydration, heat, or aerobic base fitness. See **Environmental Conditions Protocol — Cardiac Drift and Decoupling in Heat** for temperature-specific interpretation rules.
 - High Z2 Stability variance → Inconsistent pacing execution; review session targeting
 
 **Note:** HR–Power Decoupling (existing metric) serves as the cardiac drift diagnostic. Do not duplicate with separate "Aerobic Decay" metric.
@@ -1506,22 +1669,24 @@ See https://github.com/CrankAddict/section-11/tree/main/examples/reports for ann
 
 **Pre-Workout Reports must include:**
 - Weather and coach note (if athlete location is available)
+- Phase context (when confidence is high or medium)
 - Readiness assessment (HRV, RHR, Sleep vs baselines)
 - Load context (TSB, ACWR, Load/Recovery, Monotony if > 2.3)
 - Capability snapshot (Durability 7d mean + trend; TID drift if not consistent)
 - Today's planned workout with duration and targets (or rest day + next session preview)
 - Go/Modify/Skip recommendation with rationale
 
-See `PRE_WORKOUT_TEMPLATE.md` in the examples directory for conditional fields and readiness decision logic.
+See `PRE_WORKOUT_REPORT_TEMPLATE.md` in the examples directory for conditional fields and readiness decision logic.
 
 **Post-Workout Reports must include:**
 - One-line session summary
 - Completed session metrics (power, HR, zones, decoupling, VI, TSS vs planned)
 - Plan compliance assessment
-- Weekly running totals (polarization, durability 7d/28d + trend, TID 28d + drift, CTL, ATL, TSB, ACWR, hours, TSS)
+- Weekly running totals (phase context, polarization, durability 7d/28d + trend, TID 28d + drift, CTL, ATL, TSB, ACWR, hours, TSS)
 - Overall coach note (2-4 sentences: compliance, key quality observations, load context, recovery note)
+- Tomorrow preview (when planned session exists)
 
-See `POST_WORKOUT_TEMPLATE.md` in the examples directory for field reference and rounding conventions.
+See `POST_WORKOUT_REPORT_TEMPLATE.md` in the examples directory for field reference and rounding conventions.
 
 **Brevity Rule:** Brief when metrics are normal. Detailed when thresholds are breached or athlete asks "why."
 

@@ -1,6 +1,6 @@
 ---
 name: section-11
-description: Evidence-based endurance cycling coaching protocol (v11.14). Use when analyzing training data, reviewing sessions, generating pre/post-workout reports, planning workouts, answering training questions, or giving cycling coaching advice. Always read or fetch athlete JSON data before responding to any training question.
+description: Evidence-based endurance coaching protocol (v11.18). Use when analyzing training data, reviewing sessions, generating pre/post-workout reports, planning workouts, answering training questions, or giving endurance coaching advice. Always read or fetch athlete JSON data before responding to any training question.
 ---
 
 # Section 11 — AI Coaching Protocol
@@ -50,7 +50,7 @@ Load the coaching protocol using this precedence:
 
 If both root and `section11/` copies exist, prefer the root copy.
 
-**Current version:** 11.13
+**Current version:** 11.18
 
 ## External Sources
 
@@ -119,8 +119,8 @@ All training data is stored where the user chooses: on their own device or in a 
 
 The skill reads from: user-configured JSON data sources and DOSSIER.md in the data directory, and HEARTBEAT.md in the agent workspace. It writes to: DOSSIER.md in the data directory and HEARTBEAT.md in the agent workspace (during first-use setup only).
 
-**Anonymization**
-`sync.py` (maintained in the source repository) anonymizes raw training data. The skill does not perform anonymization itself. Only aggregated and derived metrics (CTL, ATL, TSB, zone distributions, power/HR summaries) are used by the AI coach.
+**Data Handling**
+`sync.py` redacts `athlete_id` from the output and replaces outdoor activity names with "Training Session" (strips location-revealing ride names). Both are on by default. All other training data — activities, wellness, intervals, power/HR values, dates — is passed through to the AI coach as-is.
 
 **Network behavior**
 When running locally (files in the data directory), no network requests are needed for protocol, templates, or data. When files are not available locally, the skill performs simple HTTP GET requests to fetch them from configured sources.

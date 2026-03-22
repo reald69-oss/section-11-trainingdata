@@ -59,12 +59,13 @@
         "3": "POOR",
         "4": "BAD"
       },
-      "mental_energy": {
-        "1": "HIGH",
-        "2": "MODERATE",
-        "3": "LOW",
-        "4": "DRAINED"
-      }
+      "menstrual": "menstrual_phase and menstrual_phase_predicted are not on the 1-4 scale. Values: PERIOD, FOLLICULAR, OVULATION, LUTEAL, etc."
+    },
+    "quick_stats": {
+      "total_training_hours": 11.82,
+      "total_training_formatted": "11h49m",
+      "total_activities": 9,
+      "total_tss": 456
     }
   },
   "metadata": {
@@ -72,7 +73,7 @@
     "last_updated": "2026-01-20T12:00:00.000000",
     "data_range_days": 7,
     "extended_range_days": 28,
-    "version": "3.85"
+    "version": "3.86"
   },
   "alerts": [],
   "readiness_decision": {
@@ -112,10 +113,19 @@
     "signal_summary": {
       "green": 6,
       "amber": 0,
-      "red": 0
+      "red": 0,
+      "unavailable": 0
     },
-    "phase_context": "Build",
-    "modification_guidance": null
+    "phase_context": {
+      "phase": "Build",
+      "phase_week": 3,
+      "amber_threshold": 3,
+      "modifier_applied": "build_loosened"
+    },
+    "race_week_defers": false,
+    "modification": null,
+    "reason": "P3 green light. 6 green, 0 amber (threshold 3), 0 red.",
+    "alarm_refs": []
   },
   "history": {
     "available": true,
@@ -548,7 +558,10 @@
         }
       },
       "has_intervals": true,
-      "description": null
+      "description": "3x12m sweet spot with 5m recovery.\nNote: Felt strong through first two sets, slight fade on third.",
+      "chat_notes": [
+        "Felt strong through first two sets, slight fade on third."
+      ]
     },
     {
       "id": "activity_3",
@@ -1185,72 +1198,72 @@
       "date": "2026-01-21",
       "name": "Endurance - Tuesday",
       "type": "WORKOUT",
+      "sport_type": "Ride",
       "planned_tss": 80,
       "duration_hours": 2.0,
       "duration_formatted": "2h00m",
       "workout_summary": "2h @160W",
-      "description": null,
-      "category": "Ride"
+      "description": null
     },
     {
       "id": 90100002,
       "date": "2026-01-22",
       "name": "VO2max Intervals",
       "type": "WORKOUT",
+      "sport_type": "Ride",
       "planned_tss": 92,
       "duration_hours": 1.5,
       "duration_formatted": "1h30m",
       "workout_summary": "10m @155W | 10m @185W | 5\u00d74m @310W / 3m rec | 15m @140W",
-      "description": null,
-      "category": "Ride"
+      "description": null
     },
     {
       "id": 90100003,
       "date": "2026-01-23",
       "name": "Recovery Spin",
       "type": "WORKOUT",
+      "sport_type": "Ride",
       "planned_tss": 30,
       "duration_hours": 1.0,
       "duration_formatted": "1h00m",
       "workout_summary": "1h @140W",
-      "description": null,
-      "category": "Ride"
+      "description": null
     },
     {
       "id": 90100004,
       "date": "2026-01-24",
       "name": "Sweet Spot",
       "type": "WORKOUT",
+      "sport_type": "Ride",
       "planned_tss": 85,
       "duration_hours": 1.5,
       "duration_formatted": "1h30m",
       "workout_summary": "10m @155W | 3\u00d712m @245W / 5m rec | 15m @140W",
-      "description": null,
-      "category": "Ride"
+      "description": null
     },
     {
       "id": 90100005,
       "date": "2026-01-25",
       "name": "Long Endurance",
       "type": "WORKOUT",
+      "sport_type": "Ride",
       "planned_tss": 115,
       "duration_hours": 3.0,
       "duration_formatted": "3h00m",
       "workout_summary": "3h @165W",
-      "description": null,
-      "category": "Ride"
+      "description": null
     },
     {
       "id": 90100006,
       "date": "2026-01-26",
       "name": "Endurance + Openers",
       "type": "WORKOUT",
+      "sport_type": "Ride",
       "planned_tss": 65,
       "duration_hours": 1.75,
       "duration_formatted": "1h45m",
       "workout_summary": "1h30m @160W | 3\u00d71m @280W / 2m rec | 10m @140W",
-      "description": null,
-      "category": "Ride"
+      "description": null
     }
   ],
   "workout_summary_stats": {
