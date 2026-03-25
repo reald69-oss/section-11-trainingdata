@@ -3,60 +3,35 @@
 Intervals.icu → GitHub/Local JSON Export
 Exports training data for LLM access.
 Supports both automated GitHub sync and manual local export.
+  
+Version 3.92 - Local-Sync: --update auto-clears history.json + intervals.json when sync.py
+  changes. Prevents stale-schema bugs. Full data restored after 2 sync cycles.
 
-Version 3.86 - Primary sport TSS filtering for phase detection: planned_tss_delta and next_week_tss_delta
-  now filter to primary sport (numerator from planned workouts, denominator from weekly history).
-  Prevents cross-training TSS (e.g. SkiErg ~9 TSS/session) from contaminating phase classification.
-  - _format_events: sport_type passthrough from raw event type field
-  - _build_weekly_tier: primary_sport + primary_sport_tss + sport_tss_breakdown on each weekly_180d row
-  - _phase_stream1_features: primary_tss_values extracted from weekly rows
-  - _phase_stream2_features: numerator and denominator filtered to primary sport, all-sport fallback
-  - _detect_phase_v2: primary_sport threaded from derived_metrics
-  Falls back to all-sport when primary sport data unavailable. Single-sport athletes unaffected.
+Version 3.91 - Sustainability Profile: per-sport power/HR sustainability table for race estimation.
+  42-day window, sport-filtered curves (power-curves + hr-curves per sport family). Cycling gets
+  three model layers (actual MMP, Coggan duration factors, CP/W' model) with model_divergence_pct.
+  Non-cycling power sports get actual MMP only. Indoor/outdoor source flag for cycling (max of
+  Ride vs VirtualRide). Per-anchor: watts, W/kg, HR, %LTHR, source, date, recency. Block-level:
+  coverage_ratio, ftp_staleness_days (cycling only). Weight fallback chain. capability namespace.
 
-Version 3.85 - Wellness field expansion: all Intervals.icu wellness fields now passed through to latest.json
-  and history.json. Adds subjective state (stress, mood, motivation, injury, hydration), vitals (spO2,
-  blood glucose, blood pressure, Baevsky SI, lactate, respiration), body composition (body fat, abdomen),
-  nutrition (kcal, carbs, protein, fat), lifestyle (steps, hydration volume), and cycle tracking
-  (menstrual phase + predicted). Bug fix: hrvSdnn → hrvSDNN case mismatch (was silently returning null).
-  wellness_field_scales legend added to READ_THIS_FIRST (1-4 scale direction + per-field labels).
-  Fields null when not reported — zero cost, no new decision logic.
+Version 3.90 - Sleep signal simplified: hours only. Sleep quality/score removed from readiness
+  classification — they are device-derived composites of HRV + HR during sleep, already captured as
+  independent signals. Quality still passes through in signal output as coaching context.
 
-Version 3.84 - Activity description passthrough, chat_notes fix (completed activities),
-  phase_week off-by-one fix.
+Version 3.89 - Phase detection current-week patch: overlay fresh CTL/TSS/hard_days/ACWR/monotony
+  onto the current week's weekly_180d row at runtime, so phase classification always uses live data
+  instead of stale history.json snapshot (up to 28 days old). Fixes phase flip caused by stale
+  current-week row. Runtime only — does not write back to history.json. Respects week_start_day.
 
-Version 3.83 - Per-sport zone preference: ZONE_PREFERENCE config overrides power/HR priority per sport family.
-  Format: "run:hr,cycling:power". Config cascade: .sync_config.json → env var → default (power preferred).
-  _get_activity_zones() converted from @staticmethod to instance method with sport_family param.
-  _aggregate_seiler_zones() refactored to use _get_activity_zones() (eliminated duplicated zone extraction).
-  zone_basis field added to zone_distribution_7d and all seiler_tid blocks. zone_preference in READ_THIS_FIRST.
-  Input validation: rejects non-power/hr values with warning. --setup wizard updated.
-  Phase detection: HR_ONLY_MAJORITY suppressed when zone_preference includes HR (intentional, not missing data).
+Version 3.88 - HR Curve Delta: max sustained HR comparison at 4 anchor durations (60s/300s/1200s/3600s)
+  across two 28-day windows. New hr-curves API call (no sport filter — HR is cross-sport physiological).
+  Data key is 'values' (not 'watts'). Rotation index: mean(60s,300s) - mean(1200s,3600s).
+  Same capability namespace, same guards, same pattern as power_curve_delta.
 
-Version 3.82 - Interval-level data: intervals.json with per-segment metrics for structured sessions.
-  Pre-filter via interval_summary + sport family whitelist (cycling, run, ski, rowing, swim).
-  Incremental cache (72h scan, 7-day retention, first-run backfill). has_intervals flag in latest.json.
-
-Version 3.81 - Feel removed from readiness decision signal chain.
-  Feel is a retrospective activity-level field, not a morning readiness marker.
-  A feel value from days ago should not drive today's go/modify/skip recommendation.
-  - Removed _get_latest_feel() method
-  - Removed feel signal from readiness_decision.signals (7 → 6 signals: HRV, RHR, Sleep, ACWR, RI, TSB)
-  - Removed feel-only case from _build_modification()
-  - Feel remains in: activity data, weekly history tier, all report templates (retrospective/trend use)
-
-Version 3.80 - --update orphan cleanup: detects and removes local files no longer in the upstream
-  manifest (e.g. files moved or deleted in a repo restructure), and standalone empty directories.
-  Runs after the pull step, shows orphaned items with [removed from repo] / [empty directory] tags,
-  prompts for confirmation. Empty parent directories cleaned up automatically.
-  Skips manifest.json, .tmp files, and hidden files/directories.
-
-Version 3.79 - Feel/RPE fix: feel removed from daily rows, RPE added to weekly tier, report templates updated
-Version 3.78 - Week alignment fix, log rotation, update checker cleanup
-Versions 3.7–3.77 — Phase detection v2, readiness decision, HRRc, week alignment, local sync pipeline, hash manifest
-Versions 3.6.0–3.6.5 — EF tracking, HR zone fallback, workout summary parser, real IDs, coach notes
-Versions 3.5.0–3.5.1 — Race calendar, HRV outlier filter
-Versions 3.3.0–3.4.1 — Durability, TID, alerts, history.json, smart fitness metrics
+Version 3.87–3.85 — Power curve delta, primary sport TSS filtering for phase detection, wellness field expansion
+Version 3.84–3.80 — Activity description passthrough, per-sport zone preference, interval-level data, feel removed from readiness, orphan cleanup
+Versions 3.7–3.79 — Phase detection v2, readiness decision, HRRc, week alignment, local sync pipeline, hash manifest, feel/RPE fix
+Versions 3.3.0–3.6.5 — EF tracking, HR zone fallback, race calendar, durability, TID, alerts, history.json, smart fitness metrics
 """
 
 import requests
@@ -86,7 +61,7 @@ class IntervalsSync:
     HISTORY_FILE = "history.json"
     UPSTREAM_REPO = "CrankAddict/section-11"
     CHANGELOG_FILE = "changelog.json"
-    VERSION = "3.86"
+    VERSION = "3.92"
     INTERVALS_FILE = "intervals.json"
 
     # Sport families eligible for interval-level data extraction.
@@ -127,6 +102,44 @@ class IntervalsSync:
     # Training week start day (Python weekday: Mon=0, Tue=1, Wed=2, Thu=3, Fri=4, Sat=5, Sun=6)
     # Default Monday (ISO). Override via .sync_config.json, WEEK_START env var, or --week-start CLI arg.
     WEEK_START_DAY = 0
+    
+    # --- Sustainability Profile (v3.91) ---
+    # Race estimation lookup table: what power/HR is sustainable at each duration?
+    SUSTAINABILITY_WINDOW_DAYS = 42
+    
+    # Per-sport anchor durations (seconds). Cycling covers long events; SkiErg/rowing are shorter.
+    SUSTAINABILITY_ANCHORS = {
+        "cycling": {"300s": 300, "600s": 600, "1200s": 1200, "1800s": 1800, "3600s": 3600, "5400s": 5400, "7200s": 7200},
+        "ski":     {"60s": 60, "120s": 120, "300s": 300, "600s": 600, "1200s": 1200, "1800s": 1800},
+        "rowing":  {"60s": 60, "120s": 120, "300s": 300, "600s": 600, "1200s": 1200, "1800s": 1800},
+    }
+    
+    # Coggan duration factors — midpoints of published ranges. Cycling only.
+    # Source: Allen & Coggan, Training and Racing with a Power Meter (3rd ed.)
+    # Sustainable power as fraction of FTP by duration.
+    COGGAN_DURATION_FACTORS = {
+        300:  1.06,   # 5min:  ~106% FTP (range 100-112%)
+        600:  0.97,   # 10min: ~97% FTP (range 94-100%)
+        1200: 0.93,   # 20min: ~93% FTP (range 91-95%)
+        1800: 0.90,   # 30min: ~90% FTP (range 88-93%)
+        3600: 0.86,   # 60min: ~86% FTP (range 83-90%)
+        5400: 0.82,   # 90min: ~82% FTP (range 78-85%)
+        7200: 0.78,   # 2h:    ~78% FTP (range 75-82%)
+    }
+    
+    # Activity types for sport-filtered power-curves fetch
+    SUSTAINABILITY_POWER_TYPES = {
+        "cycling": ["Ride", "VirtualRide"],
+        "ski":     ["NordicSki", "VirtualSki"],
+        "rowing":  ["Rowing"],
+    }
+    
+    # Activity types for sport-filtered hr-curves fetch
+    SUSTAINABILITY_HR_TYPES = {
+        "cycling": ["Ride", "VirtualRide"],
+        "ski":     ["NordicSki", "VirtualSki"],
+        "rowing":  ["Rowing"],
+    }
     
     def __init__(self, athlete_id: str, intervals_api_key: str, github_token: str = None, 
                  github_repo: str = None, debug: bool = False, week_start_day: int = None,
@@ -630,6 +643,85 @@ class IntervalsSync:
         # Format planned workouts — used by both phase detection and output
         formatted_planned_workouts = self._format_events(near_future_events, anonymize, today=today)
         
+        # Fetch power curves for delta analysis (two 28-day windows)
+        print("Fetching power curves...")
+        power_curve_data = None
+        pc_dates = None
+        try:
+            pc_end1 = today
+            pc_start1 = (datetime.now() - timedelta(days=27)).strftime("%Y-%m-%d")
+            pc_end2 = (datetime.now() - timedelta(days=28)).strftime("%Y-%m-%d")
+            pc_start2 = (datetime.now() - timedelta(days=55)).strftime("%Y-%m-%d")
+            pc_dates = (pc_start1, pc_end1, pc_start2, pc_end2)
+            power_curve_data = self._intervals_get("power-curves", {
+                "type": "Ride",
+                "curves": f"r.{pc_start1}.{pc_end1},r.{pc_start2}.{pc_end2}"
+            })
+        except Exception as e:
+            if self.debug:
+                print(f"  ⚠️  Power curve fetch failed: {e}")
+        
+        # Fetch HR curves for delta analysis (same windows, no sport filter)
+        print("Fetching HR curves...")
+        hr_curve_data = None
+        try:
+            hr_curve_data = self._intervals_get("hr-curves", {
+                "curves": f"r.{pc_dates[0]}.{pc_dates[1]},r.{pc_dates[2]}.{pc_dates[3]}"
+            }) if pc_dates else None
+        except Exception as e:
+            if self.debug:
+                print(f"  ⚠️  HR curve fetch failed: {e}")
+        
+        # Fetch sustainability curves (v3.91) — sport-filtered power + HR, single 42d window
+        print("Fetching sustainability curves...")
+        sustainability_curves = {}
+        sus_end = today
+        sus_start = (datetime.now() - timedelta(days=self.SUSTAINABILITY_WINDOW_DAYS - 1)).strftime("%Y-%m-%d")
+        sus_window = (sus_start, sus_end)
+        
+        # Determine which sport families have recent activity data
+        active_sport_families = set()
+        for a in activities_extended:
+            sf = self.SPORT_FAMILIES.get(a.get("type", ""), None)
+            if sf and sf in self.SUSTAINABILITY_ANCHORS:
+                active_sport_families.add(sf)
+        
+        for sport_family in active_sport_families:
+            sport_curves = {"power": {}, "hr": {}}
+            
+            # Power curves — one fetch per activity type (cycling: Ride + VirtualRide)
+            power_types = self.SUSTAINABILITY_POWER_TYPES.get(sport_family, [])
+            for ptype in power_types:
+                try:
+                    data = self._intervals_get("power-curves", {
+                        "type": ptype,
+                        "curves": f"r.{sus_start}.{sus_end}"
+                    })
+                    sport_curves["power"][ptype] = data
+                except Exception as e:
+                    if self.debug:
+                        print(f"  ⚠️  Sustainability power-curves ({ptype}) failed: {e}")
+            
+            # HR curves — one fetch per activity type
+            hr_types = self.SUSTAINABILITY_HR_TYPES.get(sport_family, [])
+            for htype in hr_types:
+                try:
+                    data = self._intervals_get("hr-curves", {
+                        "type": htype,
+                        "curves": f"r.{sus_start}.{sus_end}"
+                    })
+                    sport_curves["hr"][htype] = data
+                except Exception as e:
+                    if self.debug:
+                        print(f"  ⚠️  Sustainability hr-curves ({htype}) failed: {e}")
+            
+            sustainability_curves[sport_family] = sport_curves
+        
+        if sustainability_curves:
+            print(f"  📊 Sustainability curves fetched for: {', '.join(sorted(sustainability_curves.keys()))}")
+        else:
+            print("  📊 No sport families with sustainability data")
+        
         # Calculate derived metrics for Section 11 compliance
         print("Calculating derived metrics...")
         derived_metrics = self._calculate_derived_metrics(
@@ -647,7 +739,14 @@ class IntervalsSync:
             benchmark_outdoor=(benchmark_index_outdoor, ftp_8_weeks_ago_outdoor, current_ftp_outdoor),
             vo2max=vo2max,
             formatted_planned_workouts=formatted_planned_workouts,
-            race_calendar=race_calendar
+            race_calendar=race_calendar,
+            power_curve_data=power_curve_data,
+            power_curve_dates=pc_dates,
+            hr_curve_data=hr_curve_data,
+            sustainability_curves=sustainability_curves,
+            sustainability_window=sus_window,
+            sport_settings=sport_settings,
+            icu_weight=athlete.get("icu_weight")
         )
         
         # Generate alerts array (v3.3.0)
@@ -716,7 +815,7 @@ class IntervalsSync:
                 "display_formatting": "For durations and sleep, always display the '_formatted' fields (e.g., sleep_formatted, duration_formatted, total_training_formatted) instead of converting decimal '_hours' values. The formatted fields are pre-calculated from raw seconds and avoid rounding errors.",
                 "data_period": f"Last {days_back} days (including today)",
                 "extended_data_note": f"ACWR and baselines calculated from {days_for_acwr} days of data",
-                "capability_metrics_note": "The 'capability' block in derived_metrics contains durability trend (aggregate decoupling 7d/28d), efficiency factor trend (aggregate EF 7d/28d), HRRc trend (heart rate recovery 7d/28d), and TID comparison (7d vs 28d distribution drift). These measure HOW the athlete expresses fitness, not just load. Use these for coaching context alongside traditional load metrics. Durability and EF trend direction matters more than absolute values. HRRc is display only — higher = better parasympathetic recovery.",
+                "capability_metrics_note": "The 'capability' block in derived_metrics contains durability trend (aggregate decoupling 7d/28d), efficiency factor trend (aggregate EF 7d/28d), HRRc trend (heart rate recovery 7d/28d), TID comparison (7d vs 28d distribution drift), power curve delta (MMP shift at anchor durations across 28d windows — energy system adaptation direction), HR curve delta (max sustained HR shift at anchor durations — cardiac adaptation, cross-sport), and sustainability profile (per-sport power/HR sustainability table for race estimation — 42d window, sport-filtered). These measure HOW the athlete expresses fitness, not just load. Use these for coaching context alongside traditional load metrics. Durability and EF trend direction matters more than absolute values. HRRc is display only — higher = better parasympathetic recovery. Power curve delta rotation_index reveals whether gains are sprint-biased (positive) or endurance-biased (negative). HR curve delta is ambiguous — rising max sustained HR may indicate fitness or fatigue; cross-reference with resting HRV/HR and RPE. Sustainability profile provides race estimation lookup: actual MMP, Coggan predicted (cycling only), CP/W' model (cycling only), model_divergence_pct (actual vs CP — divergence IS the coaching signal). CP/W' is primary for durations ≤20min; Coggan duration factors are the established reference for ≥60min. Source flag (observed_outdoor/observed_indoor) matters for cycling race estimation — indoor MMP is typically 3-5% lower.",
                 "readiness_decision_note": "The 'readiness_decision' block contains a pre-computed go/modify/skip recommendation with priority level (P0=safety, P1=overload, P2=fatigue, P3=green), individual signal statuses, phase-adjusted thresholds, and structured modification guidance. Use this as the baseline for pre-workout recommendations. Override with explanation in the coach note if the AI's contextual judgment disagrees.",
                 "zone_preference": self.zone_preference if self.zone_preference else "default (power preferred, HR fallback)",
                 "wellness_field_scales": {
@@ -860,7 +959,14 @@ class IntervalsSync:
                                     benchmark_outdoor: Tuple[Optional[float], Optional[int], Optional[int]],
                                     vo2max: float,
                                     formatted_planned_workouts: List[Dict] = None,
-                                    race_calendar: Dict = None) -> Dict:
+                                    race_calendar: Dict = None,
+                                    power_curve_data: Dict = None,
+                                    power_curve_dates: Tuple = None,
+                                    hr_curve_data: Dict = None,
+                                    sustainability_curves: Dict = None,
+                                    sustainability_window: Tuple = None,
+                                    sport_settings: Dict = None,
+                                    icu_weight: float = None) -> Dict:
         """
         Calculate Section 11 derived metrics.
         
@@ -1061,6 +1167,23 @@ class IntervalsSync:
         efficiency_factor = self._calculate_efficiency_factor(activities_7d, activities_28d)
         hrrc_trend = self._calculate_hrrc_trend(activities_7d, activities_28d)
 
+        # === POWER CURVE DELTA (energy system adaptation trend) ===
+        power_curve_delta = self._calculate_power_curve_delta(power_curve_data, power_curve_dates)
+
+        # === HR CURVE DELTA (cardiac adaptation trend) ===
+        hr_curve_delta = self._calculate_hr_curve_delta(hr_curve_data, power_curve_dates)
+
+        # === SUSTAINABILITY PROFILE (race estimation lookup table, v3.91) ===
+        sustainability_profile = self._calculate_sustainability_profile(
+            sustainability_curves=sustainability_curves or {},
+            sustainability_window=sustainability_window,
+            power_model=power_model,
+            sport_settings=sport_settings or {},
+            wellness_7d=wellness_7d,
+            wellness_extended=wellness_extended,
+            icu_weight=icu_weight
+        )
+
         # === CONSISTENCY INDEX ===
         consistency_index, consistency_details = self._calculate_consistency_index(
             activities_for_consistency, past_events
@@ -1098,9 +1221,52 @@ class IntervalsSync:
         
         # Load weekly_180d lookback from history.json
         weekly_rows = self._load_weekly_rows_for_phase()
+        
+        # === PATCH CURRENT WEEK IN WEEKLY ROWS (v3.89) ===
+        # history.json regenerates every 28 days, but the current week's row
+        # changes every ride. Overlay fresh values from this sync run so
+        # phase detection always sees up-to-date data. Runtime only —
+        # does NOT write back to history.json.
+        now_dt = datetime.now()
+        days_since_ws = (now_dt.weekday() - self.week_start_day) % 7
+        current_ws = (now_dt - timedelta(days=days_since_ws)).strftime("%Y-%m-%d")
+        
+        # Compute current calendar-week TSS from activities_7d
+        cw_tss = 0
+        cw_primary_tss = 0
+        for a in activities_7d:
+            a_date = a.get("start_date_local", "")[:10]
+            if a_date >= current_ws:
+                a_tss = a.get("icu_training_load", 0) or 0
+                cw_tss += a_tss
+                sf = self.SPORT_FAMILIES.get(a.get("type", ""), None)
+                if sf == primary_sport:
+                    cw_primary_tss += a_tss
+        
+        fresh_row = {
+            "week_start": current_ws,
+            "total_tss": round(cw_tss, 0),
+            "primary_sport_tss": round(cw_primary_tss, 0),
+            "primary_sport": primary_sport,
+            "hard_days": hard_days_this_week,
+            "ctl_end": round(current_ctl, 1) if current_ctl else None,
+            "atl_end": round(current_atl, 1) if current_atl else None,
+            "acwr": acwr,
+            "monotony": monotony,
+        }
+        
+        if weekly_rows and weekly_rows[-1].get("week_start") == current_ws:
+            # Overlay: same week exists in history — patch it
+            weekly_rows[-1].update(fresh_row)
+        else:
+            # Append: current week not in history yet (generated before this week)
+            weekly_rows.append(fresh_row)
+        
+        # In both cases, [-1] is now the current week (being classified).
+        # previous_phase must come from [-2] (last completed week).
         previous_phase = None
-        if weekly_rows:
-            previous_phase = weekly_rows[-1].get("phase_detected")
+        if len(weekly_rows) >= 2:
+            previous_phase = weekly_rows[-2].get("phase_detected")
         
         phase_result = self._detect_phase_v2(
             weekly_rows=weekly_rows,
@@ -1178,6 +1344,9 @@ class IntervalsSync:
                 "efficiency_factor": efficiency_factor,
                 "hrrc": hrrc_trend,
                 "tid_comparison": tid_comparison,
+                "power_curve_delta": power_curve_delta,
+                "hr_curve_delta": hr_curve_delta,
+                "sustainability_profile": sustainability_profile,
             },
             
             # Tier 3: Consistency & Compliance
@@ -2000,6 +2169,587 @@ class IntervalsSync:
                      "not wired into readiness_decision signals.")
         }
 
+    def _calculate_power_curve_delta(self, power_curve_data: Dict = None,
+                                      power_curve_dates: Tuple = None) -> Dict:
+        """
+        Calculate power curve delta across two 28-day windows.
+        
+        Extracts MMP at five anchor durations (5s, 60s, 300s, 1200s, 3600s)
+        from each window. Computes % change per anchor and rotation_index.
+        
+        Rotation index = mean(short-anchor changes) - mean(long-anchor changes)
+        where short = 5s, 60s and long = 1200s, 3600s. 300s excluded (transitional).
+        Positive = sprint-biased gains, negative = endurance-biased gains.
+        
+        Curve matching by response ID field, not list index — handles empty
+        windows gracefully (API omits curves with no data).
+        
+        Guards:
+        - Per-anchor: null if duration not in secs array or watts is 0/None
+        - pct_change: null if either window's anchor watts is 0/None
+        - Block-level: null if either window has < 3 non-null anchors
+        - Rotation: null if any of the 4 component anchors has null pct_change
+        
+        References:
+        - Pinot & Grappe (2011): power-duration profiling across durations
+        - Quod et al. (2010): MMP tracking for training monitoring
+        - Intervals.icu API: GET /api/v1/athlete/{id}/power-curves
+        """
+        ANCHORS = {"5s": 5, "60s": 60, "300s": 300, "1200s": 1200, "3600s": 3600}
+        
+        # Build null block (reused for all early returns)
+        def _null_block(note="Insufficient power data in one or both windows."):
+            dates = {}
+            if power_curve_dates:
+                dates = {
+                    "current_window": {"start": power_curve_dates[0], "end": power_curve_dates[1]},
+                    "previous_window": {"start": power_curve_dates[2], "end": power_curve_dates[3]},
+                }
+            return {
+                "window_days": 28,
+                **dates,
+                "anchors": None,
+                "rotation_index": None,
+                "note": note
+            }
+        
+        # Guard: no data or no dates
+        if not power_curve_data or not power_curve_dates:
+            return _null_block()
+        
+        curves_list = power_curve_data.get("list", [])
+        if not curves_list:
+            return _null_block()
+        
+        # Match curves by ID, not list index
+        pc_start1, pc_end1, pc_start2, pc_end2 = power_curve_dates
+        current_id = f"r.{pc_start1}.{pc_end1}"
+        previous_id = f"r.{pc_start2}.{pc_end2}"
+        
+        curves_by_id = {c["id"]: c for c in curves_list if "id" in c}
+        current_curve = curves_by_id.get(current_id)
+        previous_curve = curves_by_id.get(previous_id)
+        
+        if not current_curve or not previous_curve:
+            missing = []
+            if not current_curve:
+                missing.append("current")
+            if not previous_curve:
+                missing.append("previous")
+            return _null_block(f"No power data in {' and '.join(missing)} window(s).")
+        
+        # Extract anchor values from both curves
+        anchors = {}
+        for label, duration_secs in ANCHORS.items():
+            cur_secs = current_curve.get("secs", [])
+            cur_watts = current_curve.get("watts", [])
+            prev_secs = previous_curve.get("secs", [])
+            prev_watts = previous_curve.get("watts", [])
+            
+            # Current window anchor
+            cur_w = None
+            if duration_secs in cur_secs:
+                idx = cur_secs.index(duration_secs)
+                val = cur_watts[idx] if idx < len(cur_watts) else None
+                if val is not None and val > 0:
+                    cur_w = val
+            
+            # Previous window anchor
+            prev_w = None
+            if duration_secs in prev_secs:
+                idx = prev_secs.index(duration_secs)
+                val = prev_watts[idx] if idx < len(prev_watts) else None
+                if val is not None and val > 0:
+                    prev_w = val
+            
+            # Compute pct_change (null if either side is null)
+            pct_change = None
+            if cur_w is not None and prev_w is not None:
+                pct_change = round((cur_w - prev_w) / prev_w * 100, 1)
+            
+            anchors[label] = {
+                "current_watts": cur_w,
+                "previous_watts": prev_w,
+                "pct_change": pct_change
+            }
+        
+        # Block-level guard: need >= 3 non-null anchors in EACH window
+        current_valid = sum(1 for a in anchors.values() if a["current_watts"] is not None)
+        previous_valid = sum(1 for a in anchors.values() if a["previous_watts"] is not None)
+        
+        if current_valid < 3 or previous_valid < 3:
+            return _null_block(f"Too few valid anchors (current: {current_valid}, previous: {previous_valid}, need 3+).")
+        
+        # Rotation index: mean(5s, 60s) - mean(1200s, 3600s), 300s excluded
+        short_changes = [anchors["5s"]["pct_change"], anchors["60s"]["pct_change"]]
+        long_changes = [anchors["1200s"]["pct_change"], anchors["3600s"]["pct_change"]]
+        
+        rotation_index = None
+        if all(v is not None for v in short_changes + long_changes):
+            short_mean = sum(short_changes) / len(short_changes)
+            long_mean = sum(long_changes) / len(long_changes)
+            rotation_index = round(short_mean - long_mean, 1)
+        
+        if self.debug:
+            if rotation_index is not None:
+                print(f"  📈 Power curve delta: rotation={rotation_index:+.1f}")
+            else:
+                print(f"  📈 Power curve delta: rotation unavailable (missing anchor data)")
+            for label, vals in anchors.items():
+                if vals["pct_change"] is not None:
+                    print(f"      {label}: {vals['current_watts']}W vs {vals['previous_watts']}W ({vals['pct_change']:+.1f}%)")
+        
+        return {
+            "window_days": 28,
+            "current_window": {"start": pc_start1, "end": pc_end1},
+            "previous_window": {"start": pc_start2, "end": pc_end2},
+            "anchors": anchors,
+            "rotation_index": rotation_index,
+            "note": ("Compares MMP at 5 anchor durations (5s neuromuscular, 60s anaerobic, "
+                     "300s MAP, 1200s threshold, 3600s endurance) across two 28d windows. "
+                     "rotation_index = mean(5s,60s pct_change) - mean(1200s,3600s pct_change). "
+                     "Positive = sprint-biased gains, negative = endurance-biased. "
+                     "300s excluded from rotation (transitional). "
+                     "Null when either window has fewer than 3 valid anchor durations.")
+        }
+
+    def _calculate_hr_curve_delta(self, hr_curve_data: Dict = None,
+                                   curve_dates: Tuple = None) -> Dict:
+        """
+        Calculate HR curve delta across two 28-day windows.
+        
+        Extracts max sustained HR at four anchor durations (60s, 300s, 1200s, 3600s)
+        from each window. Computes % change per anchor and rotation_index.
+        
+        No 5s anchor — peak HR at 5s is just max HR, not an energy system signal.
+        
+        Rotation index = mean(short-anchor changes) - mean(long-anchor changes)
+        where short = 60s, 300s and long = 1200s, 3600s.
+        Positive = intensity-biased HR shift, negative = endurance-biased shift.
+        
+        IMPORTANT: Unlike power where higher is always better, rising max sustained HR
+        is ambiguous — could indicate improved cardiac output (fitness gain) or
+        accumulated fatigue / dehydration / heat. The AI coach must cross-reference
+        with resting HRV, resting HR, RPE trends, and environmental context.
+        
+        No sport filter on the API call — HR is physiological, not sport-specific.
+        Max sustained HR at 300s is max sustained HR at 300s whether from cycling,
+        running, or SkiErg. The curve is naturally dominated by the hardest efforts.
+        
+        Data key is 'values' (not 'watts' as in power curves).
+        
+        Guards: same as power_curve_delta — per-anchor null, div-by-zero, block-level <3.
+        """
+        ANCHORS = {"60s": 60, "300s": 300, "1200s": 1200, "3600s": 3600}
+        
+        def _null_block(note="Insufficient HR data in one or both windows."):
+            dates = {}
+            if curve_dates:
+                dates = {
+                    "current_window": {"start": curve_dates[0], "end": curve_dates[1]},
+                    "previous_window": {"start": curve_dates[2], "end": curve_dates[3]},
+                }
+            return {
+                "window_days": 28,
+                **dates,
+                "anchors": None,
+                "rotation_index": None,
+                "note": note
+            }
+        
+        # Guard: no data or no dates
+        if not hr_curve_data or not curve_dates:
+            return _null_block()
+        
+        curves_list = hr_curve_data.get("list", [])
+        if not curves_list:
+            return _null_block()
+        
+        # Match curves by ID, not list index
+        pc_start1, pc_end1, pc_start2, pc_end2 = curve_dates
+        current_id = f"r.{pc_start1}.{pc_end1}"
+        previous_id = f"r.{pc_start2}.{pc_end2}"
+        
+        curves_by_id = {c["id"]: c for c in curves_list if "id" in c}
+        current_curve = curves_by_id.get(current_id)
+        previous_curve = curves_by_id.get(previous_id)
+        
+        if not current_curve or not previous_curve:
+            missing = []
+            if not current_curve:
+                missing.append("current")
+            if not previous_curve:
+                missing.append("previous")
+            return _null_block(f"No HR data in {' and '.join(missing)} window(s).")
+        
+        # Extract anchor values — HR curves use 'values' key, not 'watts'
+        anchors = {}
+        for label, duration_secs in ANCHORS.items():
+            cur_secs = current_curve.get("secs", [])
+            cur_values = current_curve.get("values", [])
+            prev_secs = previous_curve.get("secs", [])
+            prev_values = previous_curve.get("values", [])
+            
+            # Current window anchor
+            cur_v = None
+            if duration_secs in cur_secs:
+                idx = cur_secs.index(duration_secs)
+                val = cur_values[idx] if idx < len(cur_values) else None
+                if val is not None and val > 0:
+                    cur_v = val
+            
+            # Previous window anchor
+            prev_v = None
+            if duration_secs in prev_secs:
+                idx = prev_secs.index(duration_secs)
+                val = prev_values[idx] if idx < len(prev_values) else None
+                if val is not None and val > 0:
+                    prev_v = val
+            
+            # Compute pct_change (null if either side is null)
+            pct_change = None
+            if cur_v is not None and prev_v is not None:
+                pct_change = round((cur_v - prev_v) / prev_v * 100, 1)
+            
+            anchors[label] = {
+                "current_bpm": cur_v,
+                "previous_bpm": prev_v,
+                "pct_change": pct_change
+            }
+        
+        # Block-level guard: need >= 3 non-null anchors in EACH window
+        current_valid = sum(1 for a in anchors.values() if a["current_bpm"] is not None)
+        previous_valid = sum(1 for a in anchors.values() if a["previous_bpm"] is not None)
+        
+        if current_valid < 3 or previous_valid < 3:
+            return _null_block(f"Too few valid anchors (current: {current_valid}, previous: {previous_valid}, need 3+).")
+        
+        # Rotation index: mean(60s, 300s) - mean(1200s, 3600s)
+        short_changes = [anchors["60s"]["pct_change"], anchors["300s"]["pct_change"]]
+        long_changes = [anchors["1200s"]["pct_change"], anchors["3600s"]["pct_change"]]
+        
+        rotation_index = None
+        if all(v is not None for v in short_changes + long_changes):
+            short_mean = sum(short_changes) / len(short_changes)
+            long_mean = sum(long_changes) / len(long_changes)
+            rotation_index = round(short_mean - long_mean, 1)
+        
+        if self.debug:
+            if rotation_index is not None:
+                print(f"  📈 HR curve delta: rotation={rotation_index:+.1f}")
+            else:
+                print(f"  📈 HR curve delta: rotation unavailable (missing anchor data)")
+            for label, vals in anchors.items():
+                if vals["pct_change"] is not None:
+                    print(f"      {label}: {vals['current_bpm']}bpm vs {vals['previous_bpm']}bpm ({vals['pct_change']:+.1f}%)")
+        
+        return {
+            "window_days": 28,
+            "current_window": {"start": pc_start1, "end": pc_end1},
+            "previous_window": {"start": pc_start2, "end": pc_end2},
+            "anchors": anchors,
+            "rotation_index": rotation_index,
+            "note": ("Compares max sustained HR at 4 anchor durations (60s anaerobic ceiling, "
+                     "300s VO2max HR, 1200s threshold HR, 3600s endurance HR) across two 28d windows. "
+                     "rotation_index = mean(60s,300s pct_change) - mean(1200s,3600s pct_change). "
+                     "Positive = intensity-biased HR shift, negative = endurance-biased. "
+                     "No sport filter — HR is cross-sport physiological (dominated by hardest efforts). "
+                     "IMPORTANT: rising max sustained HR is ambiguous — may indicate improved cardiac "
+                     "output (good) or accumulated fatigue/dehydration/heat (bad). Cross-reference with "
+                     "resting HRV, resting HR, RPE, and environmental context before interpreting. "
+                     "Null when either window has fewer than 3 valid anchor durations.")
+        }
+
+    def _calculate_sustainability_profile(self, sustainability_curves: Dict,
+                                           sustainability_window: Tuple,
+                                           power_model: Dict,
+                                           sport_settings: Dict,
+                                           wellness_7d: List[Dict],
+                                           wellness_extended: List[Dict],
+                                           icu_weight: float = None) -> Dict:
+        """
+        Build per-sport sustainability profile for race estimation (v3.91).
+        
+        For each active sport family, extracts MMP and max sustained HR at
+        sport-specific anchor durations from a single wider window (42d default).
+        
+        Three model layers for cycling:
+        1. Actual MMP — observed from training data
+        2. Coggan predicted — FTP × duration factor (Allen & Coggan, 3rd ed.)
+        3. CP/W' predicted — P = CP + W'/t (Skiba critical power model)
+        
+        Non-cycling power sports get actual MMP only (no published duration
+        factors, no sport-specific CP/W' values).
+        
+        Indoor/outdoor handling (cycling only): fetches Ride and VirtualRide
+        separately, takes max at each anchor. Source flag indicates which
+        environment produced the best effort.
+        
+        Weight fallback chain: today's wellness → most recent in wellness
+        history → athlete.icu_weight → null (all W/kg fields null).
+        
+        References:
+        - Allen & Coggan, Training and Racing with a Power Meter (3rd ed.)
+        - Skiba et al. (2012): CP/W' model for performance prediction
+        - Pinot & Grappe (2011): power-duration profiling
+        """
+        # Null block for early returns
+        def _null_profile(note="No sustainability data available."):
+            result = {"note": note}
+            if sustainability_window:
+                result["window"] = {
+                    "days": self.SUSTAINABILITY_WINDOW_DAYS,
+                    "start": sustainability_window[0],
+                    "end": sustainability_window[1]
+                }
+            return result
+        
+        if not sustainability_curves or not sustainability_window:
+            return _null_profile()
+        
+        # --- Weight fallback chain ---
+        weight_kg = None
+        weight_source = None
+        
+        # 1. Today's wellness (last entry in 7d)
+        if wellness_7d:
+            for w in reversed(wellness_7d):
+                if w.get("weight"):
+                    weight_kg = round(w["weight"], 1)
+                    weight_source = "wellness_recent"
+                    break
+        
+        # 2. Extended wellness history
+        if weight_kg is None and wellness_extended:
+            for w in reversed(wellness_extended):
+                if w.get("weight"):
+                    weight_kg = round(w["weight"], 1)
+                    weight_source = "wellness_extended"
+                    break
+        
+        # 3. Athlete profile weight (icu_weight)
+        if weight_kg is None and icu_weight is not None:
+            weight_kg = round(icu_weight, 1)
+            weight_source = "athlete_profile"
+        
+        if self.debug:
+            if weight_kg:
+                print(f"  ⚖️  Sustainability weight: {weight_kg}kg ({weight_source})")
+            else:
+                print(f"  ⚖️  Sustainability weight: unavailable (W/kg will be null)")
+        
+        # --- FTP staleness (cycling only) ---
+        ftp_staleness_days = None
+        try:
+            ftp_history = self._load_ftp_history()
+            all_dates = []
+            for ftp_type in ["indoor", "outdoor"]:
+                dates = list(ftp_history.get(ftp_type, {}).keys())
+                all_dates.extend(dates)
+            if all_dates:
+                most_recent = max(all_dates)
+                most_recent_date = datetime.strptime(most_recent, "%Y-%m-%d")
+                ftp_staleness_days = (datetime.now() - most_recent_date).days
+        except Exception:
+            pass
+        
+        # --- Cycling model inputs ---
+        cycling_ftp = None
+        cycling_w_prime = None
+        cycling_settings = sport_settings.get("cycling", {})
+        
+        # Use athlete-set FTP from sportSettings (not eFTP)
+        cycling_ftp = cycling_settings.get("ftp")
+        if not cycling_ftp:
+            # Fallback to indoor FTP if outdoor not set
+            cycling_ftp = cycling_settings.get("ftp_indoor")
+        
+        cycling_w_prime = power_model.get("w_prime")  # In joules from API
+        
+        # --- Build per-sport blocks ---
+        profile = {
+            "window": {
+                "days": self.SUSTAINABILITY_WINDOW_DAYS,
+                "start": sustainability_window[0],
+                "end": sustainability_window[1]
+            },
+            "weight_kg": weight_kg,
+            "weight_source": weight_source,
+        }
+        
+        for sport_family, sport_data in sustainability_curves.items():
+            anchors_map = self.SUSTAINABILITY_ANCHORS.get(sport_family)
+            if not anchors_map:
+                continue
+            
+            sport_lthr = sport_settings.get(sport_family, {}).get("lthr")
+            power_curves_by_type = sport_data.get("power", {})
+            hr_curves_by_type = sport_data.get("hr", {})
+            
+            is_cycling = (sport_family == "cycling")
+            
+            # --- Extract MMP per anchor (power) ---
+            # For cycling: max(Ride, VirtualRide) at each anchor with source tracking
+            anchors = {}
+            curve_id = f"r.{sustainability_window[0]}.{sustainability_window[1]}"
+            
+            for label, duration_secs in anchors_map.items():
+                best_watts = None
+                best_source = None
+                
+                for ptype, pdata in power_curves_by_type.items():
+                    curves_list = pdata.get("list", []) if isinstance(pdata, dict) else []
+                    curves_by_id = {c["id"]: c for c in curves_list if "id" in c}
+                    curve = curves_by_id.get(curve_id)
+                    if not curve:
+                        continue
+                    
+                    secs = curve.get("secs", [])
+                    watts = curve.get("watts", [])
+                    
+                    if duration_secs in secs:
+                        idx = secs.index(duration_secs)
+                        val = watts[idx] if idx < len(watts) else None
+                        if val is not None and val > 0:
+                            if best_watts is None or val > best_watts:
+                                best_watts = val
+                                if is_cycling:
+                                    if ptype == "VirtualRide":
+                                        best_source = "observed_indoor"
+                                    else:
+                                        best_source = "observed_outdoor"
+                                else:
+                                    best_source = "observed"
+                
+                # --- Extract max sustained HR at this anchor ---
+                best_hr = None
+                
+                for htype, hdata in hr_curves_by_type.items():
+                    curves_list = hdata.get("list", []) if isinstance(hdata, dict) else []
+                    curves_by_id = {c["id"]: c for c in curves_list if "id" in c}
+                    curve = curves_by_id.get(curve_id)
+                    if not curve:
+                        continue
+                    
+                    secs = curve.get("secs", [])
+                    values = curve.get("values", [])
+                    
+                    if duration_secs in secs:
+                        idx = secs.index(duration_secs)
+                        val = values[idx] if idx < len(values) else None
+                        if val is not None and val > 0:
+                            if best_hr is None or val > best_hr:
+                                best_hr = round(val)
+                
+                # --- Compute W/kg ---
+                actual_wpkg = None
+                if best_watts is not None and weight_kg is not None and weight_kg > 0:
+                    actual_wpkg = round(best_watts / weight_kg, 2)
+                
+                # --- Compute %LTHR ---
+                pct_lthr = None
+                if best_hr is not None and sport_lthr is not None and sport_lthr > 0:
+                    pct_lthr = round(best_hr / sport_lthr * 100, 1)
+                
+                # --- Coggan model (cycling only) ---
+                coggan_watts = None
+                coggan_wpkg = None
+                if is_cycling and cycling_ftp and duration_secs in self.COGGAN_DURATION_FACTORS:
+                    coggan_watts = round(cycling_ftp * self.COGGAN_DURATION_FACTORS[duration_secs])
+                    if weight_kg and weight_kg > 0:
+                        coggan_wpkg = round(coggan_watts / weight_kg, 2)
+                
+                # --- CP/W' model (cycling only) ---
+                cp_model_watts = None
+                cp_model_wpkg = None
+                if is_cycling and cycling_ftp and cycling_w_prime and duration_secs > 0:
+                    # P = CP + W'/t  (CP approximated by FTP for this model)
+                    cp_model_watts = round(cycling_ftp + cycling_w_prime / duration_secs)
+                    if weight_kg and weight_kg > 0:
+                        cp_model_wpkg = round(cp_model_watts / weight_kg, 2)
+                
+                # --- Model divergence (actual vs CP model) ---
+                model_divergence_pct = None
+                if best_watts is not None and cp_model_watts is not None and cp_model_watts > 0:
+                    model_divergence_pct = round((best_watts - cp_model_watts) / cp_model_watts * 100, 1)
+                
+                # --- Best effort date (not available from aggregate curves) ---
+                # The power-curves endpoint returns aggregate MMP, not per-activity.
+                # Date/recency fields would require cross-referencing recent_activities,
+                # which isn't passed this deep. Omitted by design — the AI can cross-ref.
+                
+                anchor_data = {
+                    "actual_watts": best_watts,
+                    "actual_wpkg": actual_wpkg,
+                    "actual_hr": best_hr,
+                    "pct_lthr": pct_lthr,
+                    "source": best_source,
+                }
+                
+                # Cycling gets model layers
+                if is_cycling:
+                    anchor_data["coggan_watts"] = coggan_watts
+                    anchor_data["coggan_wpkg"] = coggan_wpkg
+                    anchor_data["cp_model_watts"] = cp_model_watts
+                    anchor_data["cp_model_wpkg"] = cp_model_wpkg
+                    anchor_data["model_divergence_pct"] = model_divergence_pct
+                
+                anchors[label] = anchor_data
+            
+            # --- Coverage ratio ---
+            total_anchors = len(anchors)
+            observed_anchors = sum(1 for a in anchors.values() if a.get("actual_watts") is not None)
+            coverage_ratio = round(observed_anchors / total_anchors, 2) if total_anchors > 0 else 0
+            
+            # Block-level guard: need >= 2 non-null anchors
+            if observed_anchors < 2:
+                profile[sport_family] = {
+                    "anchors": None,
+                    "coverage_ratio": coverage_ratio,
+                    "note": f"Too few observed anchors ({observed_anchors}, need 2+)."
+                }
+                continue
+            
+            sport_block = {
+                "anchors": anchors,
+                "coverage_ratio": coverage_ratio,
+            }
+            
+            # Cycling-only fields at sport block level
+            if is_cycling:
+                sport_block["ftp_used"] = cycling_ftp
+                sport_block["w_prime_used"] = cycling_w_prime
+                sport_block["ftp_staleness_days"] = ftp_staleness_days
+                sport_block["model_trust_note"] = (
+                    "CP/W' model (P=CP+W'/t) is primary for durations ≤20min where W' contribution "
+                    "is meaningful. Coggan duration factors (Allen & Coggan, 3rd ed.) are the established "
+                    "reference for ≥60min. 30min is the crossover zone where both apply. "
+                    "model_divergence_pct = (actual - CP_model) / CP_model × 100. "
+                    "Positive divergence at short durations may indicate strong anaerobic capacity "
+                    "or stale W' value. Indoor MMP is typically 3-5% lower than outdoor (cooling, "
+                    "motivation) — source flag indicates which environment produced each anchor."
+                )
+            
+            profile[sport_family] = sport_block
+            
+            if self.debug:
+                print(f"  📊 Sustainability {sport_family}: {observed_anchors}/{total_anchors} anchors observed")
+                for label, vals in anchors.items():
+                    w = vals.get("actual_watts")
+                    hr = vals.get("actual_hr")
+                    src = vals.get("source", "")
+                    if w is not None:
+                        div = vals.get("model_divergence_pct")
+                        div_str = f", div={div:+.1f}%" if div is not None else ""
+                        print(f"      {label}: {w}W ({src}), HR={hr}{div_str}")
+        
+        # If no sport blocks were added beyond the header
+        has_sport_data = any(k not in ("window", "weight_kg", "weight_source", "note") for k in profile)
+        if not has_sport_data:
+            return _null_profile("No sport families produced valid sustainability data.")
+        
+        return profile
+
     def _calculate_tid_comparison(self, seiler_tid_7d: Dict,
                                    seiler_tid_28d: Dict) -> Dict:
         """
@@ -2096,15 +2846,17 @@ class IntervalsSync:
         )
         reason_codes.extend(extra_reasons)
         
-        # Phase duration: count consecutive weeks of same phase from recent weekly rows
+        # Phase duration: count consecutive weeks of same phase from history.
+        # Skip weekly_rows[-1] — it's the current week (being classified now,
+        # phase_detected is stale or absent). Count from [-2] backward, +1 for current.
         phase_duration = 0
         if phase and weekly_rows:
-            for row in reversed(weekly_rows):
+            for row in reversed(weekly_rows[:-1]):
                 if row.get("phase_detected") == phase:
                     phase_duration += 1
                 else:
                     break
-            phase_duration += 1  # include current in-progress week
+            phase_duration += 1  # current week (just classified)
         
         # Dossier agreement
         dossier_agreement = None
@@ -3169,10 +3921,10 @@ class IntervalsSync:
             rhr_delta = None
             signals["rhr"] = {"status": "unavailable", "value": latest_rhr, "baseline_7d": rhr_baseline_7d, "delta_bpm": None}
         
-        # Sleep signal
+        # Sleep signal (hours only — sleep quality/score excluded from readiness; v3.90)
         if sleep_hours is not None:
-            sleep_red = sleep_hours < 5 or (sleep_quality is not None and sleep_quality >= 4)
-            sleep_amber = (not sleep_red) and (sleep_hours < 7 or (sleep_quality is not None and sleep_quality >= 3))
+            sleep_red = sleep_hours < 5
+            sleep_amber = (not sleep_red) and sleep_hours < 7
             if sleep_red:
                 sleep_status = "red"
             elif sleep_amber:
@@ -6002,6 +6754,23 @@ def do_update():
             print(f"\n   Updated {len(updated)} file{'s' if len(updated) != 1 else ''}, {len(failed)} failed")
         elif updated:
             print(f"\n   ✅ {len(updated)} file{'s' if len(updated) != 1 else ''} updated")
+
+        # --- Cache invalidation: sync.py schema change ---
+        sync_updated = any(u["path"] == "examples/sync.py" for u in updated)
+        if sync_updated:
+            cache_cleared = []
+            for cache_file in ("history.json", "intervals.json"):
+                cache_path = data_dir / cache_file
+                if cache_path.exists():
+                    try:
+                        cache_path.unlink()
+                        cache_cleared.append(cache_file)
+                    except Exception as e:
+                        print(f"   ⚠️  Could not delete {cache_file}: {e}")
+            if cache_cleared:
+                print(f"\n   🔄 sync.py updated → cleared {', '.join(cache_cleared)}")
+                print(f"      Timer users: full data after 2 cycles (~2 min)")
+                print(f"      Manual users: run sync twice to rebuild")
 
     # --- Orphan cleanup (runs regardless of whether files were updated) ---
     orphaned_files = _find_orphaned_files(upstream_files, target_dir)

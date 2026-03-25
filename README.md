@@ -28,7 +28,7 @@ An open protocol for deterministic, auditable AI-powered endurance coaching. Bui
 | [examples/agentic/](examples/agentic/) | Write planned workouts to Intervals.icu calendar — for agentic AI platforms with code execution |
 | [examples/json-local-sync/](examples/json-local-sync/) | Local automated sync for agentic platforms — no GitHub needed |
 | [DOSSIER_TEMPLATE.md](DOSSIER_TEMPLATE.md) | Blank athlete dossier template — fill in your own data |
-| [examples/](examples/) | JSON sync setup, report templates, README template, example files |
+| [examples/](examples/) | Full examples directory |
 | [SETUP_ASSISTANT.md](SETUP_ASSISTANT.md) | Interactive AI-guided setup — paste into any AI chat to get started |
 | [manifest.json](manifest.json) | Version tracking — consumed by sync.py for update notifications |
 | [LICENSE](LICENSE) | MIT — permissive license, commercial use allowed with attribution |
@@ -42,6 +42,8 @@ Your data stays on your machine or in repos you control. Section 11 does not run
 ---
 
 The setup paths documented here are proven starting points — not the only ways to use Section 11. The protocol is open, and the data is yours. Build what fits you.
+
+For the full experience, an agentic platform with persistent memory and code execution unlocks the complete project, especially with the local sync pipeline. See [Agentic Setup](#agentic-setup).
 
 ---
 
@@ -59,9 +61,9 @@ Copy `DOSSIER_TEMPLATE.md` and fill in your athlete profile (age, weight, goals)
 
 Keep your Intervals.icu data fresh for your AI coach automatically.
 
-**[GitHub sync](examples/json-auto-sync/SETUP.md)** — GitHub Actions syncs every 15 minutes to a private repo. Your AI reads via GitHub connector or raw URL. Zero maintenance after setup.
+**[Local sync](examples/json-local-sync/SETUP.md)** — a script on a machine you control syncs your data on a 60-second timer. Your AI reads directly from the filesystem or via a cloud connector (Google Drive, OneDrive — [platform support varies](#platform-setup)).
 
-**[Local sync](examples/json-local-sync/SETUP.md)** — a script on a machine you control syncs your data on a 60-second timer. Your AI reads directly from the filesystem or via a cloud connector (Google Drive, OneDrive — [platform support varies](#platform-setup)). No GitHub needed.
+**[GitHub sync](examples/json-auto-sync/SETUP.md)** — GitHub Actions syncs every 15 minutes to a private repo. Your AI reads via GitHub connector or raw URL.
 
 **[Manual export](examples/json-manual/SETUP.md)** — run once, upload the file. No automation.
 
@@ -69,17 +71,65 @@ Keep your Intervals.icu data fresh for your AI coach automatically.
 
 Choose your path:
 
+- **[Agentic Platforms](#agentic-setup)** — OpenClaw, Claude Code, Claude Cowork, ChatGPT Codex, Gemini CLI (code execution, push workouts to calendar) ← **full protocol experience**
 - **[Web Chat Platforms](#web-chat-setup)** — ChatGPT Projects, Claude Projects, Gemini Gems, Grok, Mistral Le Chat
-- **[Agentic Platforms](#agentic-setup)** — OpenClaw, Claude Code, Claude Cowork, ChatGPT Codex, Gemini CLI (code execution, push workouts to calendar)
 
 ### 4. Make Files Available to Your AI
 
 Your AI needs access to `SECTION_11.md` (the protocol) and `DOSSIER.md` (your profile). How depends on your setup:
 
-- **GitHub connector:** If these files are in your connected repo, the AI reads them directly — no upload needed. If only `DOSSIER.md` is in your data repo, upload `SECTION_11.md` separately (or connect the CrankAddict/section-11 repo too).
-- **Cloud connector (Google Drive, OneDrive — [platform support varies](#platform-setup)):** If these files are in your synced folder, the AI reads them through the connector — no upload needed.
-- **Local/agentic:** The AI reads directly from the filesystem — no upload needed.
-- **URL fetch (no connector):** Upload both files to your AI platform's knowledge base manually.
+- **Local/agentic:** The AI reads directly from the filesystem.
+- **GitHub connector:** If these files are in your connected repo, the AI reads them directly. If only `DOSSIER.md` is in your data repo, upload `SECTION_11.md` separately (or connect the CrankAddict/section-11 repo too).
+- **Cloud connector (Google Drive, OneDrive — [platform support varies](#platform-setup)):** If these files are in your synced folder, the AI reads them through the connector.
+- **URL fetch (no connector):** If your data repo is public, the AI can fetch raw URLs directly.
+- **Manual upload:** Upload both files to your AI platform or project.
+
+---
+
+## Agentic Setup
+
+For AI platforms that can execute code, access the filesystem, and run shell commands. These platforms can read your JSON files directly (no web fetch needed), push planned workouts to your Intervals.icu calendar, and run sync.py locally.
+
+> **Recommended for agentic: [Local sync](examples/json-local-sync/SETUP.md).** sync.py runs on a 60-second timer, the agent reads files directly. Cheapest, fastest, most reliable. No GitHub needed.
+
+> **Alternative: GitHub sync.** A private repo with GitHub Actions gives you multi-device access and backup. Follow the per-platform instructions below.
+
+Your agent needs `SECTION_11.md` (the protocol) and your `DOSSIER.md`. If you cloned the repos locally, the agent reads them from the filesystem. If using GitHub sync, the agent reads them from the repo — no manual upload needed.
+
+### OpenClaw (formerly ClawdBot/MoltBot)
+
+This is the reference setup. Section 11 works well with [OpenClaw](https://github.com/openclaw/openclaw): persistent memory, heartbeat scheduling, autonomous execution, and structured validation.
+
+1. Clone or copy the Section 11 skill folder into your OpenClaw skills directory (skills are just directories with a `SKILL.md`)
+2. Authenticate: `gh auth login`, or for limited access use a [fine-grained personal access token](https://github.com/settings/tokens?type=beta) scoped to your data repo only
+
+### Claude Code
+
+1. Install: see [claude.ai/download](https://claude.ai/download) or `npm install -g @anthropic-ai/claude-code`
+2. Authenticate: `gh auth login` for GitHub repo access, or clone your data repo locally
+
+### Claude Cowork
+
+Cowork is a desktop app that can read files directly from your filesystem.
+
+1. Clone your data repo locally and grant Cowork access to that folder
+2. Or connect GitHub via Settings → Connectors → GitHub (or configure via `.mcp.json`)
+
+### ChatGPT Codex
+
+1. Connect your GitHub account at [chatgpt.com/codex](https://chatgpt.com/codex) and authorize your data repo — web and desktop app connect directly
+2. Or install the CLI: `npm install -g @openai/codex` — reads from local filesystem
+
+### Gemini CLI
+
+1. Install: `npm install -g @google/gemini-cli` (or `npx @google/gemini-cli`)
+2. Clone your data repo locally — Gemini CLI has full filesystem access
+
+### Pushing Workouts to Calendar
+
+Agentic platforms can write planned workouts to your Intervals.icu calendar using [push.py](examples/agentic/). This requires code execution — web chat platforms cannot use this feature.
+
+See [examples/agentic/README.md](examples/agentic/README.md) for setup, commands, and workout syntax.
 
 ---
 
@@ -140,17 +190,17 @@ Omit fields only if data unavailable for that activity type.
 - DOSSIER.md — Profile, zones, goals (attached or in connected data repo)
 ```
 
-**If using URL fetch:** Replace `[USERNAME]/[REPO]` with your GitHub data mirror path.
+**If using local sync:** The AI reads files from the data directory. No URL editing needed. See [local sync setup](examples/json-local-sync/SETUP.md) for project instructions tailored to filesystem access.
 
 **If using a connector (GitHub, Google Drive, OneDrive — [platform support varies](#platform-setup)):** The AI reads files directly — no URL editing needed. If you committed `DOSSIER.md` to your data repo, the connector provides your data and dossier in one connection. `SECTION_11.md` can be uploaded separately or accessed via a second connector to the CrankAddict/section-11 repo.
 
-**If using local sync:** The AI reads files from the data directory. No URL editing needed. See [local sync setup](examples/json-local-sync/SETUP.md) for project instructions tailored to filesystem access.
+**If using URL fetch:** Replace `[USERNAME]/[REPO]` with your GitHub data mirror path.
 
 ### Platform Setup
 
 Most major AI platforms now have native GitHub connectors that can access private repos directly. This means you no longer need a public repo or manual file uploads in most cases.
 
-**GitHub connector status for web chat platforms.** Agentic platforms (Claude Code, Codex, OpenClaw, etc.) have full GitHub access including workflow dispatch — see [Agentic Setup](#agentic-setup).
+**GitHub connector status for web chat platforms.** Agentic platforms (OpenClaw, Claude Code, Codex, etc.) have full GitHub access including workflow dispatch — see [Agentic Setup](#agentic-setup).
 
 | Platform | GitHub Connector | Private Repos | Can Trigger Actions | Plan Notes |
 |----------|-----------------|---------------|---------------------|------------|
@@ -225,55 +275,6 @@ Most major AI platforms now have native GitHub connectors that can access privat
 2. Add instructions
 3. **GitHub connector:** Available on Pro, Max, and Enterprise plans via App Connectors.
 4. **No connector?** Upload SECTION_11.md and DOSSIER.md to the Space. Free users without connector access should use URL-based fetch (requires public repo) or upload files manually.
-
----
-
-## Agentic Setup
-
-For AI platforms that can execute code, access the filesystem, and run shell commands. These platforms can read your JSON files directly (no web fetch needed), push planned workouts to your Intervals.icu calendar, and run sync.py locally.
-
-> **Recommended for agentic: [Local sync](examples/json-local-sync/SETUP.md).** sync.py runs on a 60-second timer, the agent reads files directly. Cheapest, fastest, most reliable. No GitHub needed.
-
-> **Alternative: GitHub sync.** A private repo with GitHub Actions gives you multi-device access and backup. Follow the per-platform instructions below.
-
-### OpenClaw (formerly ClawdBot/MoltBot)
-
-Section 11 works well with [OpenClaw](https://github.com/openclaw/openclaw). The combination of persistent memory + autonomous execution + structured validation makes for a capable coaching setup.
-
-1. Clone or copy the Section 11 skill folder into your OpenClaw skills directory (skills are just directories with a `SKILL.md`)
-2. Authenticate: `gh auth login`
-3. For limited access, use a [fine-grained personal access token](https://github.com/settings/tokens?type=beta) scoped to your data repo only
-
-### Claude Code
-
-1. Install the Claude GitHub App at [github.com/apps/claude](https://github.com/apps/claude/installations/select_target) and grant access to your private data repo
-2. Or clone the repo locally and work with local files
-3. Claude Code has full filesystem access — point it at your data directory
-
-### Claude Cowork
-
-Cowork runs on your local machine and can read files directly from your filesystem.
-
-1. Clone your private data repo locally and grant Cowork access to that folder
-2. Or use the GitHub MCP connector in Cowork settings to access repos directly via a personal access token
-
-### ChatGPT Codex
-
-1. Connect your GitHub account via the ChatGPT GitHub connector at [chatgpt.com/codex](https://chatgpt.com/codex)
-2. Authorize access to your private training data repo during setup
-3. Codex clones the repo into an isolated container and reads `latest.json`, `history.json`, and `intervals.json` directly
-4. The Codex CLI works locally with your existing filesystem and Git setup
-
-### Gemini CLI
-
-1. Install: `npm install -g @google/gemini-cli` (or `npx @google/gemini-cli`)
-2. Clone your data repo locally — Gemini CLI has full filesystem access
-
-### Pushing Workouts to Calendar
-
-Agentic platforms can write planned workouts to your Intervals.icu calendar using [push.py](examples/agentic/). This requires code execution — web chat platforms cannot use this feature.
-
-See [examples/agentic/README.md](examples/agentic/README.md) for setup, commands, and workout syntax.
 
 ---
 
@@ -402,7 +403,7 @@ Standardized metadata schema for audit trails:
   "validation_metadata": {
     "data_source_fetched": true,
     "json_fetch_status": "success",
-    "protocol_version": "11.17",
+    "protocol_version": "11.20",
     "checklist_passed": [0, 1, 2, 3, 4, 5, 6, "6b", 7, 8, 9, 10],
     "checklist_failed": [],
     "data_timestamp": "2026-01-23T10:02:07Z",
