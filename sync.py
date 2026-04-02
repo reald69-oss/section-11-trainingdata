@@ -6489,6 +6489,24 @@ def main():
             except Exception as e:
                 print(f"   ⚠️ intervals.json push failed (non-critical): {e}")
         
+        # Also publish markdown report to GitHub
+        try:
+            md_content = sync.generate_markdown_report(data)
+            sync.publish_markdown_to_github(md_content, filepath="latest.md",
+                commit_message=f"Auto-sync latest.md - {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+            print(f"✅ Markdown report published to GitHub (latest.md)")
+        except Exception as e:
+            print(f"   ⚠️ Markdown publish failed (non-critical): {e}")
+        
+        print(f"\n✅ Data published to GitHub")
+        if args.anonymize:
+            print(f"   🔒 Anonymization: ENABLED")
+        print_summary()
+        print(f"\n📊 Static URL for LLMs:")
+        print(f"   {raw_url}")
+        print(f"\n💬 Example prompt:")
+        print(f'   "Analyze my training data from {raw_url}"')
+            
         # === AUTO HISTORY GENERATION (Sundays/Mondays, first two runs after midnight) ===
         if sync.should_generate_history():
             try:
