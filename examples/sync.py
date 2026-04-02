@@ -19,7 +19,7 @@ Version 3.93 - Route & Terrain Intelligence: GPX/TCX attachments on events parse
   has_terrain flag on planned workouts and race calendar entries. GPX + TCX via stdlib
   xml.etree.ElementTree (zero new deps). FIT format stubbed. Elevation smoothing (50m window).
   Start trimming (2km local gradient) prevents flat approaches inflating climbs. Course character
-  uses total elevation + elevation_per_km + climb category upgrades. Hash-based cache invalidation:
+  uses elevation_per_km + climb category upgrades. Hash-based cache invalidation:
   script_hash (SHA256 of sync.py) on routes.json, intervals.json, history.json — any code change
   auto-invalidates cached files on next run. activity_types order-preserving dedup (was set()).
 
@@ -408,6 +408,14 @@ class IntervalsSync:
             evt_date = (evt.get("start_date_local") or "")[:10]
             evt_category = evt.get("category", "")
             
+            # Start time: HH:MM when set (not midnight)
+            evt_start_time = None
+            raw_start = evt.get("start_date_local") or ""
+            if "T" in raw_start:
+                time_part = raw_start.split("T")[1][:5]
+                if time_part != "00:00":
+                    evt_start_time = time_part
+            
             for att in attachments:
                 att_id = att.get("id")
                 filename = att.get("filename", "")
@@ -429,6 +437,10 @@ class IntervalsSync:
                     entry["event_name"] = evt_name
                     entry["event_date"] = evt_date
                     entry["category"] = evt_category
+                    if evt_start_time:
+                        entry["start_time"] = evt_start_time
+                    else:
+                        entry.pop("start_time", None)
                     new_entries.append(entry)
                     if self.debug:
                         print(f"    ✓ Cached terrain: {evt_name} ({filename})")
@@ -440,7 +452,7 @@ class IntervalsSync:
                 
                 terrain_summary = self._download_and_parse_route(url, filename)
                 
-                new_entries.append({
+                entry = {
                     "event_id": evt_id,
                     "event_name": evt_name,
                     "event_date": evt_date,
@@ -448,7 +460,10 @@ class IntervalsSync:
                     "attachment_id": att_id,
                     "filename": filename,
                     "terrain_summary": terrain_summary
-                })
+                }
+                if evt_start_time:
+                    entry["start_time"] = evt_start_time
+                new_entries.append(entry)
         
         # Build routes.json
         self._routes_data = {
@@ -643,14 +658,14 @@ class IntervalsSync:
         raw_descents = self._detect_segments(trackpoints, cum_dist, smoothed_ele, min_gradient=1.5, min_distance=500.0, ascending=False)
         descents = [d for d in raw_descents if abs(d["elevation_m"]) >= 100 or abs(d["avg_gradient_pct"]) >= 3.0]
         
-        # Course character — base from total elevation + elevation_per_km,
-        # then upgrade based on detected climb categories.
-        # A route with a Cat 1 climb is hilly regardless of total elevation.
-        if total_elevation_m >= 3000 or elevation_per_km >= 30:
+        # Course character — elevation density (m/km) only.
+        # Total elevation is distance-blind: 2000m over 300km is rolling,
+        # not hilly. Climb category upgrades handle "flat with one big climb."
+        if elevation_per_km >= 30:
             course_character = "mountain"
-        elif total_elevation_m >= 1500 or elevation_per_km >= 20:
+        elif elevation_per_km >= 20:
             course_character = "hilly"
-        elif total_elevation_m >= 200 or elevation_per_km >= 5:
+        elif elevation_per_km >= 5:
             course_character = "rolling"
         else:
             course_character = "flat"
