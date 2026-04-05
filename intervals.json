@@ -1,57 +1,9 @@
 {
-  "generated_at": "2026-04-04T05:51:22.001270",
+  "generated_at": "2026-04-05T06:09:26.849253",
   "version": "3.86",
   "scan_hours": 72,
   "retention_days": 7,
   "activities": [
-    {
-      "activity_id": "i135310101",
-      "date": "2026-03-28",
-      "type": "VirtualRide",
-      "name": "Bike: Phase 1.1 - Aerobic 12's #1",
-      "interval_summary": [
-        "1x 15m16s 151w"
-      ],
-      "intervals": [
-        {
-          "type": "RECOVERY",
-          "duration_secs": 705,
-          "avg_power": 131,
-          "max_power": 176,
-          "avg_hr": 110,
-          "max_hr": 125,
-          "avg_cadence": 76.57305,
-          "zone": 2,
-          "training_load": 8.401739,
-          "decoupling": -1.0007282
-        },
-        {
-          "type": "WORK",
-          "label": "916s@151w82rpm",
-          "duration_secs": 916,
-          "avg_power": 151,
-          "max_power": 195,
-          "avg_hr": 129,
-          "max_hr": 137,
-          "avg_cadence": 81.882095,
-          "zone": 3,
-          "training_load": 14.696712,
-          "decoupling": 4.2147427
-        },
-        {
-          "type": "RECOVERY",
-          "duration_secs": 1987,
-          "avg_power": 135,
-          "max_power": 180,
-          "avg_hr": 131,
-          "max_hr": 138,
-          "avg_cadence": 83.4308,
-          "zone": 2,
-          "training_load": 25.147968,
-          "decoupling": 2.4302344
-        }
-      ]
-    },
     {
       "activity_id": "i136400604",
       "date": "2026-04-01",
