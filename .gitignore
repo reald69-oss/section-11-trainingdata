@@ -1,5 +1,11 @@
+# Data files — synced by workflow, don't need in git history
+# (comment out if you want data versioned in the repo)
+data/
+.xlsx
+
 .DS_Store
-.latest.json
-.interval.json
-.history.json
-.ftp_history.json
+latest.json
+interval.json
+history.json
+ftp_history.json
+
