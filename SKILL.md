@@ -1,6 +1,6 @@
 ---
 name: section-11
-description: Evidence-based endurance coaching protocol (v11.25). Use when analyzing training data, reviewing sessions, generating pre/post-workout reports, planning workouts, answering training questions, or giving endurance coaching advice. Always read or fetch athlete JSON data before responding to any training question.
+description: Evidence-based endurance coaching protocol (v11.31). Use when analyzing training data, reviewing sessions, generating pre/post-workout reports, planning workouts, answering training questions, or giving endurance coaching advice. Always read or fetch athlete JSON data before responding to any training question.
 ---
 
 # Section 11 — AI Coaching Protocol
@@ -27,7 +27,7 @@ On first use:
    - **GitHub URL fetch:** Athlete creates a private or public GitHub repo for training data with automated sync. Save raw URLs in DOSSIER.md under "Data Source".
    - `latest.json` — current 7-day snapshot + 28-day derived metrics
    - `history.json` — longitudinal data (daily 90d, weekly 180d, monthly 3y)
-   - `intervals.json` — per-interval segment data for recent structured sessions (7-day retention)
+   - `intervals.json` — per-interval segment data for recent structured sessions, plus DFA a1 session rollups when AlphaHRV recorded (14-day retention)
    - `routes.json` — route/terrain data for events with GPX/TCX attachments (when present)
    - See: https://github.com/CrankAddict/section-11#2-set-up-your-data-mirror-optional-but-recommended
 
@@ -55,7 +55,7 @@ Load the coaching protocol using this precedence:
 
 If both root and `section11/` copies exist, prefer the root copy.
 
-**Current version:** 11.25
+**Current version:** 11.31
 
 ## External Sources
 
@@ -128,7 +128,7 @@ All training data is stored where the user chooses: on their own device or in a 
 The skill reads from: user-configured JSON data sources and DOSSIER.md in the data directory, and HEARTBEAT.md in the agent workspace. It writes to: DOSSIER.md in the data directory and HEARTBEAT.md in the agent workspace (during first-use setup only).
 
 **Data Handling**
-`sync.py` redacts `athlete_id` from the output and replaces outdoor activity names with "Training Session" (strips location-revealing ride names). Both are on by default. All other training data — activities, wellness, intervals, power/HR values, dates — is passed through to the AI coach as-is.
+`sync.py` redacts `athlete_id` from the output (always on, unconditional). Activity names are passed through as-is — they carry coaching context (route identification, terrain association). All other training data — activities, wellness, intervals, power/HR values, dates — is passed through to the AI coach as-is.
 
 **Network behavior**
 When running locally (files in the data directory), no network requests are needed for protocol, templates, or data. When files are not available locally, the skill performs simple HTTP GET requests to fetch them from configured sources.
