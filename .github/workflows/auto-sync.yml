@@ -2,7 +2,7 @@ name: Auto-Sync Intervals.icu Data
 
 on:
   schedule:
-    - cron: '0 5 * * *'
+    - cron: '0 23 * * SUN'
     
   workflow_dispatch:  # Allow manual trigger
 
