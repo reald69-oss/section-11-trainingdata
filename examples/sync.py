@@ -4,6 +4,37 @@ Intervals.icu → GitHub/Local JSON Export
 Exports training data for LLM access.
 Supports both automated GitHub sync and manual local export.
 
+Version 3.106 - has_intervals semantics fix: has_intervals is now true only when at least
+  one interval segment is type=="WORK". Pre-existing bug: a non-empty intervals list was
+  treated as structured, but Intervals.icu emits a single whole-session RECOVERY placeholder
+  on unstructured endurance rides. Live v3.105 test across 62 activities showed 9 false
+  positives (SkiErg, virtual endurance) vs 3 true RECOVERY,WORK structures. This realizes
+  the v3.101 intent ("narrowed to structured segments only") which never took effect at the
+  check level. has_dfa and intervals collection logic unchanged — only the downstream flag
+  is tightened.
+
+Version 3.105 - Effort Response Signal: new effort_response key on every recent_activities[]
+  entry. Deterministic classifier mapping session IF (icu_intensity) against reported RPE
+  (icu_rpe) through the v11.34 RPE Expectation Bands. Values: "positive" (RPE below band —
+  fitness/freshness tell), "neutral" (RPE within band), "negative" (RPE above band —
+  fatigue/under-recovery tell), null when IF or RPE absent, RPE <= 0, or IF < 0.65 (out of
+  band coverage — recovery/aborted sessions are a deliberate gap, not missing data). Session
+  IF used by design; matches whole-session RPE the athlete actually logs, and work-portion
+  IF from intervals.json is available for case-by-case inspection but not the field value.
+  icu_intensity is stored as percentage (0-100+); classifier normalizes to decimal at entry
+  to match the canonical band table in SECTION_11.md §RPE Expectation Bands. Interpretive
+  overlay — does NOT alter Feel/RPE Override rules (v11.14) and does NOT enter the
+  readiness P0-P3 ladder.
+
+Version 3.104 - Aggregate Durability reliability gate: alarm (28d mean > 5%) now requires
+  qualifying_sessions_28d >= 5 before firing; declining warning (7d > 28d by > 2%) now
+  requires qualifying_sessions_7d >= 3 AND qualifying_sessions_28d >= 5. Below gate, metrics
+  stay visible in capability.durability but no alert fires. Two new fields on the durability
+  object: reliability_limited (bool, true when N28<5 or N7<3) and reliability_note (string
+  with both N values and both minimums, null when unlimited). The high_drift_count_7d >= 3
+  warning is count-based and untouched. Filter criteria (VI <= 1.05, >= 90min) unchanged —
+  this is a sample-size safeguard, not a metric redefinition. Addresses GitHub issue #11.
+
 Version 3.103 - Athlete profile + notes + per-field unit labels: new top-level athlete_profile
   block in latest.json (date_of_birth, derived age, height_m, sex, location, timezone,
   platform_activated, derived years_on_platform) sourced from the existing athlete endpoint
@@ -97,7 +128,7 @@ class IntervalsSync:
     HISTORY_FILE = "history.json"
     UPSTREAM_REPO = "CrankAddict/section-11"
     CHANGELOG_FILE = "changelog.json"
-    VERSION = "3.103"
+    VERSION = "3.106"
     INTERVALS_FILE = "intervals.json"
     ROUTES_FILE = "routes.json"
 
@@ -2461,6 +2492,49 @@ class IntervalsSync:
             else:
                 return "normal"
 
+    def _classify_effort_response(self, if_value: Optional[float],
+                                    rpe: Optional[float]) -> Optional[str]:
+        """
+        Classify effort response per the v11.34 RPE Expectation Bands.
+
+        Reads session IF (icu_intensity, stored as percentage 0-100+) and reported RPE
+        (icu_rpe, 1-10). Normalizes IF to decimal at entry to match the canonical band
+        table in SECTION_11.md §RPE Expectation Bands.
+
+        Returns:
+            "positive" - RPE below the expected band (fitness/freshness tell)
+            "neutral"  - RPE within the expected band
+            "negative" - RPE above the expected band (fatigue/under-recovery tell)
+            None       - IF absent, RPE absent or <= 0, or IF < 0.65 (out of coverage)
+
+        The IF < 0.65 null is a deliberate design gap, not missing data — recovery rides
+        and aborted sessions fall outside the bands' calibration range, and fabricating a
+        band there would produce noise on the sessions least worth flagging.
+
+        Interpretive overlay only. Does NOT alter Feel/RPE Override rules (v11.14) and
+        does NOT enter the readiness P0-P3 ladder.
+        """
+        if if_value is None or rpe is None or rpe <= 0:
+            return None
+        if_decimal = if_value / 100.0
+        if if_decimal < 0.65:
+            return None
+        if if_decimal < 0.75:
+            band_low, band_high = 2, 4
+        elif if_decimal < 0.85:
+            band_low, band_high = 4, 6
+        elif if_decimal < 0.95:
+            band_low, band_high = 6, 8
+        elif if_decimal < 1.05:
+            band_low, band_high = 8, 9
+        else:
+            band_low, band_high = 9, 10
+        if rpe < band_low:
+            return "positive"
+        if rpe > band_high:
+            return "negative"
+        return "neutral"
+
     def _calculate_consistency_index(self, activities: List[Dict], 
                                       past_events: List[Dict]) -> Tuple[Optional[float], Dict]:
         """
@@ -3025,22 +3099,40 @@ class IntervalsSync:
             else:
                 trend = "stable"
 
+        # Reliability gate: alarm needs N28>=5; declining warning needs N7>=3 AND N28>=5.
+        # Flag set whenever either gate would suppress an alert if one were to fire.
+        # The mean itself is still computed at N>=2 for situational awareness.
+        n7 = len(vals_7d)
+        n28 = len(vals_28d)
+        reliability_limited = (n28 < 5) or (n7 < 3)
+        reliability_note = None
+        if reliability_limited:
+            reliability_note = (
+                f"insufficient qualifying sessions for alert evaluation: "
+                f"7d N={n7} (min 3), 28d N={n28} (min 5)"
+            )
+
         if self.debug:
-            print(f"  Durability: 7d={mean_7d} ({len(vals_7d)} sessions), "
-                  f"28d={mean_28d} ({len(vals_28d)} sessions), trend={trend}")
+            print(f"  Durability: 7d={mean_7d} ({n7} sessions), "
+                  f"28d={mean_28d} ({n28} sessions), trend={trend}, "
+                  f"reliability_limited={reliability_limited}")
 
         return {
             "mean_decoupling_7d": mean_7d,
             "mean_decoupling_28d": mean_28d,
             "high_drift_count_7d": high_drift_7d,
             "high_drift_count_28d": high_drift_28d,
-            "qualifying_sessions_7d": len(vals_7d),
-            "qualifying_sessions_28d": len(vals_28d),
+            "qualifying_sessions_7d": n7,
+            "qualifying_sessions_28d": n28,
             "trend": trend,
+            "reliability_limited": reliability_limited,
+            "reliability_note": reliability_note,
             "note": ("Steady-state power sessions only (VI <= 1.05, VI > 0, "
                      ">= 90min, power data). Negative decoupling = strong "
                      "durability. Trend compares 7d vs 28d mean "
-                     "(+/-1% = stable).")
+                     "(+/-1% = stable). Alerts require N28>=5 (alarm) "
+                     "or N7>=3 AND N28>=5 (declining warning) for "
+                     "statistical reliability.")
         }
 
     def _calculate_efficiency_factor(self, activities_7d: List[Dict],
@@ -5015,41 +5107,50 @@ class IntervalsSync:
                         "tier": 1
                     })
         
-        # --- Durability Alerts (v3.4.0) ---
-        # Aggregate decoupling trend from capability metrics
+        # --- Durability Alerts (v3.4.0; N-gate added v3.104) ---
+        # Aggregate decoupling trend from capability metrics.
+        # Reliability gate: alarm requires N28>=5; declining warning requires N7>=3 AND N28>=5.
+        # Below the gate, metrics are still surfaced in capability.durability but no alert fires.
+        # The high_drift_count warning (>=3 sessions in 7d) is count-based and naturally
+        # self-guarding — not subject to the reliability gate.
         capability = derived_metrics.get("capability", {})
         durability = capability.get("durability", {})
         dur_mean_7d = durability.get("mean_decoupling_7d")
         dur_mean_28d = durability.get("mean_decoupling_28d")
         dur_trend = durability.get("trend")
         dur_high_drift_7d = durability.get("high_drift_count_7d", 0)
+        dur_n_7d = durability.get("qualifying_sessions_7d", 0)
+        dur_n_28d = durability.get("qualifying_sessions_28d", 0)
 
-        # Alarm: sustained high decoupling (28d mean > 5%)
-        if dur_mean_28d is not None and dur_mean_28d > 5.0:
+        # Alarm: sustained high decoupling (28d mean > 5%, requires N28>=5)
+        if (dur_mean_28d is not None and dur_mean_28d > 5.0
+                and dur_n_28d >= 5):
             alerts.append({
                 "metric": "durability",
                 "value": dur_mean_28d,
                 "severity": "alarm",
-                "threshold": "28d mean > 5%",
+                "threshold": "28d mean > 5% (N28>=5)",
                 "context": f"Sustained high decoupling ({dur_mean_28d}% 28d mean). Aerobic efficiency concern — review volume and recovery.",
                 "persistence_days": None,
                 "tier": 3
             })
-        # Warning: declining trend with >2% delta
+        # Warning: declining trend with >2% delta (requires N7>=3 AND N28>=5)
         elif (dur_trend == "declining" and dur_mean_7d is not None
               and dur_mean_28d is not None
-              and (dur_mean_7d - dur_mean_28d) > 2.0):
+              and (dur_mean_7d - dur_mean_28d) > 2.0
+              and dur_n_7d >= 3 and dur_n_28d >= 5):
             alerts.append({
                 "metric": "durability",
                 "value": dur_mean_7d,
                 "severity": "warning",
-                "threshold": "7d > 28d by > 2%",
+                "threshold": "7d > 28d by > 2% (N7>=3, N28>=5)",
                 "context": f"Durability declining: 7d mean decoupling {dur_mean_7d}% vs 28d {dur_mean_28d}%. Check fatigue and recovery.",
                 "persistence_days": None,
                 "tier": 3
             })
 
         # Warning: repeated poor durability (>= 3 high-drift sessions in 7d)
+        # Count-based; not subject to the reliability gate.
         if dur_high_drift_7d >= 3:
             alerts.append({
                 "metric": "durability",
@@ -6603,16 +6704,21 @@ class IntervalsSync:
                 "elevation_m": act.get("total_elevation_gain"),
                 "feel": act.get("feel"),
                 "rpe": act.get("icu_rpe"),
+                "effort_response": self._classify_effort_response(
+                    act.get("icu_intensity"), act.get("icu_rpe")
+                ),
                 "zone_distribution": zone_dist,
                 "has_intervals": False,
                 "has_dfa": False,
             }
 
-            # v3.100: has_intervals narrowed to structured segments only;
+            # has_intervals: requires at least one WORK segment. Intervals.icu emits a
+            # whole-session RECOVERY placeholder on unstructured endurance rides, so a
+            # non-empty intervals list alone is not sufficient.
             # has_dfa flags AlphaHRV sessions; dfa_summary attached only when sufficient.
             _entry = intervals_by_id.get(str(act.get("id")))
             if _entry:
-                if _entry.get("intervals"):
+                if any(i.get("type") == "WORK" for i in (_entry.get("intervals") or [])):
                     activity["has_intervals"] = True
                 _dfa = _entry.get("dfa")
                 if _dfa:
