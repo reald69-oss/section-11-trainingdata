@@ -128,7 +128,7 @@ class IntervalsSync:
     HISTORY_FILE = "history.json"
     UPSTREAM_REPO = "CrankAddict/section-11"
     CHANGELOG_FILE = "changelog.json"
-    VERSION = "3.106"
+    VERSION = "3.107"
     INTERVALS_FILE = "intervals.json"
     ROUTES_FILE = "routes.json"
 
@@ -352,6 +352,293 @@ class IntervalsSync:
             if self.debug:
                 print(f"    ⚠️  Could not fetch streams for {activity_id}: {e}")
             return {}
+
+    def _fetch_terrain_streams(self, activity_id: str) -> tuple:
+        """
+        Fetch latlng + altitude streams for terrain analysis.
+        
+        Distinguishes terminal from transient errors so the caller can decide
+        whether to write a terminal status (skip on future syncs) or leave
+        unmarked (retry on next sync).
+        
+        Unlike _fetch_activity_streams (which is used for DFA and treats all
+        errors uniformly as "no data"), this fetcher classifies the response.
+        The latlng stream uses Intervals' dual-array shape (data=lat, data2=lng)
+        which the generic fetcher discards, so we return the raw stream list.
+        
+        Returns (status, payload):
+            ("ok", streams_list)         — 200 with usable streams
+            ("no_gps", None)             — 200 but no latlng stream present
+            ("no_elevation", streams_list) — 200 with latlng but no altitude
+                                            (caller may still want trackpoints)
+            ("terminal_error", code_str) — 4xx (excluding 429); code is "http_NNN"
+            ("transient", reason_str)    — 5xx, 429, network, timeout, parse error
+        """
+        url = f"{self.INTERVALS_BASE_URL}/activity/{activity_id}/streams.json?types=time,distance,altitude,latlng"
+        headers = {
+            "Authorization": f"Basic {self.intervals_auth}",
+            "Accept": "application/json"
+        }
+        try:
+            response = requests.get(url, headers=headers, timeout=30)
+        except requests.exceptions.Timeout:
+            return ("transient", "timeout")
+        except requests.exceptions.RequestException as e:
+            return ("transient", f"network: {str(e)[:80]}")
+        
+        status_code = response.status_code
+        if status_code == 200:
+            try:
+                data = response.json()
+            except ValueError:
+                return ("transient", "parse_error")
+            if not isinstance(data, list):
+                return ("transient", "unexpected_shape")
+            latlng_stream = next((s for s in data if s.get("type") == "latlng"), None)
+            altitude_stream = next((s for s in data if s.get("type") == "altitude"), None)
+            if not latlng_stream:
+                return ("no_gps", None)
+            lat_arr = latlng_stream.get("data") or []
+            lng_arr = latlng_stream.get("data2") or []
+            valid_pairs = sum(1 for la, ln in zip(lat_arr, lng_arr) if la is not None and ln is not None)
+            if valid_pairs < 10:
+                return ("no_gps", None)
+            if not altitude_stream or not (altitude_stream.get("data") or []):
+                return ("no_elevation", data)
+            return ("ok", data)
+        elif status_code == 429:
+            return ("transient", "rate_limited")
+        elif 400 <= status_code < 500:
+            return ("terminal_error", f"http_{status_code}")
+        elif 500 <= status_code < 600:
+            return ("transient", f"http_{status_code}")
+        else:
+            return ("transient", f"unexpected_status_{status_code}")
+
+    def _athlete_units_from_dict(self, athlete: Dict) -> Dict[str, str]:
+        """
+        Extract the athlete's unit preferences from an already-fetched athlete dict.
+        
+        Returns a dict mapping concept to unit code:
+            {
+              "wind":     "m/s" | "km/h" | "mph",
+              "temp":     "c" | "f",
+              "rain":     "mm" | "in",
+              "distance": "metric" | "imperial",
+              "weight":   "kg" | "lb",
+              "height":   "cm" | "in"
+            }
+        
+        Used to populate the `units` block on weather_summary so the data values
+        can stay in stable keys (e.g. avg_wind_speed) regardless of athlete
+        settings, with the unit resolved separately. Falls back to all-metric
+        defaults if the input dict is missing or empty.
+        """
+        defaults = {
+            "wind": "m/s", "temp": "c", "rain": "mm",
+            "distance": "metric", "weight": "kg", "height": "cm"
+        }
+        if not athlete:
+            return defaults
+        # Map Intervals settings to our normalized codes.
+        wind_map = {"MPS": "m/s", "KPH": "km/h", "MPH": "mph"}
+        rain_map = {"MM": "mm", "IN": "in"}
+        return {
+            "wind": wind_map.get(athlete.get("wind_speed"), defaults["wind"]),
+            "temp": "f" if athlete.get("fahrenheit") else "c",
+            "rain": rain_map.get(athlete.get("rain"), defaults["rain"]),
+            "distance": "imperial" if athlete.get("measurement_preference") not in ("meters", None) else "metric",
+            "weight": "lb" if athlete.get("weight_pref_lb") else "kg",
+            "height": "in" if athlete.get("height_units") == "IN" else "cm"
+        }
+
+    def _load_previous_latest(self) -> Dict[str, Dict]:
+        """
+        Read previous latest.json and build an activity-id-keyed lookup dict.
+        
+        Used as the persistent state for terrain/weather summaries — fields
+        already populated on a previous sync are copied forward instead of
+        being re-fetched. The presence of `terrain_summary` (or terminal
+        `terrain_status`) on a record IS the "already pulled" signal.
+        
+        Returns a dict mapping str(activity_id) -> {
+            "terrain_summary": <dict or absent>,
+            "terrain_status":  <str or absent>,
+            "terrain_error":   <str or absent>,
+            "weather_summary": <dict or absent>
+            # weather_status not copied forward — re-evaluated each sync from
+            # current activity-list `has_weather` field.
+        }
+        Empty dict when latest.json is absent (first sync, fresh data dir).
+        Activity IDs are normalized to strings to defend against type mismatch
+        between dict construction and lookup.
+        """
+        latest_path = self.data_dir / "latest.json"
+        if not latest_path.exists():
+            return {}
+        try:
+            with open(latest_path, 'r') as f:
+                data = json.load(f)
+        except Exception as e:
+            if self.debug:
+                print(f"    ⚠️  Could not read previous latest.json: {e}")
+            return {}
+        
+        lookup = {}
+        for act in data.get("recent_activities", []):
+            act_id = act.get("id")
+            if act_id is None:
+                continue
+            entry = {}
+            if "terrain_summary" in act:
+                entry["terrain_summary"] = act["terrain_summary"]
+            if "terrain_status" in act:
+                entry["terrain_status"] = act["terrain_status"]
+            if "terrain_error" in act:
+                entry["terrain_error"] = act["terrain_error"]
+            if "weather_summary" in act:
+                entry["weather_summary"] = act["weather_summary"]
+            if entry:
+                lookup[str(act_id)] = entry
+        return lookup
+
+    def _build_terrain_for_activity(self, act: Dict, previous_lookup: Dict[str, Dict]) -> Dict:
+        """
+        Resolve terrain fields for one activity per the per-activity decision logic.
+        
+        Returns a dict of fields to attach to the activity record (may be empty).
+        Possible keys in the returned dict: terrain_summary, terrain_status,
+        terrain_error.
+        
+        Decision tree:
+          1. activity.type not in OUTDOOR_TYPES        → return {} (no field; type is the indoor signal)
+          2. previous has terrain_summary              → copy forward (success, never re-fetch)
+          3. previous has terminal terrain_status      → copy forward (no_gps/no_elevation/failed are terminal)
+          4. otherwise                                  → fetch streams, classify, attach
+                ok            → terrain_summary
+                no_gps        → terrain_status="no_gps"
+                no_elevation  → terrain_status="no_elevation" (still terminal — won't gain altitude later)
+                terminal_error→ terrain_status="failed", terrain_error=<code>
+                transient     → return {} (no field written → retry next sync)
+        """
+        act_type = act.get("type", "")
+        if act_type not in self.OUTDOOR_TYPES:
+            return {}
+        
+        act_id = act.get("id")
+        if act_id is None:
+            return {}
+        prev = previous_lookup.get(str(act_id), {})
+        
+        # Copy-forward: success
+        if "terrain_summary" in prev:
+            return {"terrain_summary": prev["terrain_summary"]}
+        # Copy-forward: terminal non-success
+        prev_status = prev.get("terrain_status")
+        if prev_status in {"no_gps", "no_elevation", "failed"}:
+            out = {"terrain_status": prev_status}
+            if "terrain_error" in prev:
+                out["terrain_error"] = prev["terrain_error"]
+            return out
+        
+        # Not yet attempted: fetch and classify
+        status, payload = self._fetch_terrain_streams(act_id)
+        if status == "ok":
+            trackpoints = self._streams_to_trackpoints(payload)
+            if len(trackpoints) < 2:
+                return {"terrain_status": "no_gps"}
+            # Defensive: even when _fetch_terrain_streams reports the altitude
+            # array exists, individual values may all be None (sensor failure
+            # mid-ride, malformed upload). _streams_to_trackpoints filters
+            # None elevations per-point. If no trackpoint ended up with an
+            # `ele` key, we'd otherwise produce a misleading flat summary.
+            if not any("ele" in tp for tp in trackpoints):
+                return {"terrain_status": "no_elevation"}
+            summary = self._analyze_terrain(
+                trackpoints, source="activity_streams", include_polyline=False
+            )
+            if summary is None:
+                # Final guard — _analyze_terrain returns None for degenerate
+                # paths beyond the all-None case caught above.
+                return {"terrain_status": "no_elevation"}
+            return {"terrain_summary": summary}
+        elif status == "no_gps":
+            return {"terrain_status": "no_gps"}
+        elif status == "no_elevation":
+            # Has GPS but no altitude. Coach can't reason about climbs/grade,
+            # so we mark terminal rather than emit a misleading "flat" summary.
+            return {"terrain_status": "no_elevation"}
+        elif status == "terminal_error":
+            return {"terrain_status": "failed", "terrain_error": payload}
+        else:
+            # transient — write nothing, retry next sync
+            if self.debug:
+                print(f"    ⚠️  Terrain fetch transient failure for {act_id}: {payload} (will retry)")
+            return {}
+
+    def _build_weather_for_activity(self, act: Dict, previous_lookup: Dict[str, Dict],
+                                    units: Dict[str, str]) -> Dict:
+        """
+        Resolve weather fields for one activity.
+        
+        Weather is provided by Intervals on the activity-list response (no extra
+        API call), gated on `has_weather: true`. Unlike terrain, weather has NO
+        terminal failure mode — `weather_status: "unavailable"` is never copied
+        forward, because Intervals may compute weather later and we want to
+        re-evaluate every sync.
+        
+        Decision tree:
+          1. activity.type not in OUTDOOR_TYPES → return {} (no field)
+          2. previous has weather_summary       → copy forward (one less rebuild)
+          3. has_weather true                   → build summary from current data
+          4. else                               → weather_status="unavailable"
+        
+        Note: step 2 is purely an optimization (avoid rebuilding the summary
+        every sync). Since Intervals' weather fields don't change once set,
+        the copy-forward result is identical to a fresh build.
+        """
+        act_type = act.get("type", "")
+        if act_type not in self.OUTDOOR_TYPES:
+            return {}
+        
+        act_id = act.get("id")
+        prev = previous_lookup.get(str(act_id), {}) if act_id is not None else {}
+        if "weather_summary" in prev:
+            return {"weather_summary": prev["weather_summary"]}
+        
+        if not act.get("has_weather"):
+            return {"weather_status": "unavailable"}
+        
+        # Build summary from existing fields on the activity list response.
+        # Stable keys + explicit `units` block (no dynamic suffixes).
+        summary = {
+            "source": "intervals_open_meteo",
+            "units": {
+                "wind": units.get("wind", "m/s"),
+                "temp": units.get("temp", "c"),
+                "rain": units.get("rain", "mm"),
+            },
+            "avg_wind_speed": act.get("average_wind_speed"),
+            "avg_wind_gust": act.get("average_wind_gust"),
+            "prevailing_wind_deg": act.get("prevailing_wind_deg"),
+            "headwind_pct": act.get("headwind_percent"),
+            "tailwind_pct": act.get("tailwind_percent"),
+            "avg_temp": act.get("average_weather_temp"),
+            "avg_temp_device": act.get("average_temp"),
+            "avg_feels_like": act.get("average_feels_like"),
+            "min_feels_like": act.get("min_feels_like"),
+            "max_feels_like": act.get("max_feels_like"),
+            "min_temp": act.get("min_weather_temp"),
+            "max_temp": act.get("max_weather_temp"),
+            "clouds_pct": act.get("average_clouds"),
+            "rain": act.get("max_rain"),
+            "snow": act.get("max_snow"),
+        }
+        # Round numerics for cleaner JSON; preserve None values.
+        for k, v in list(summary.items()):
+            if isinstance(v, float):
+                summary[k] = round(v, 2)
+        return {"weather_summary": summary}
 
     def _compute_dfa_block(self, streams: Dict[str, List]) -> Optional[Dict]:
         """
@@ -970,13 +1257,24 @@ class IntervalsSync:
         a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlam / 2) ** 2
         return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     
-    def _analyze_terrain(self, trackpoints: List[Dict]) -> Dict:
+    def _analyze_terrain(self, trackpoints: List[Dict],
+                         source: str = "gpx_attachment",
+                         include_polyline: bool = True) -> Dict:
         """
         Analyze trackpoints into terrain_summary.
         
         Computes: total distance, total elevation gain, climb/descent detection,
         course character, elevation_per_km. Elevation smoothed with rolling
         window (~50m) before gradient calculation to reduce GPS jitter.
+        
+        Parameters:
+            trackpoints: list of {lat, lon, ele?} dicts.
+            source: tag stored in output. "gpx_attachment" for route attachments
+                (default, preserves existing routes.json behavior). "activity_streams"
+                for completed activities pulled from Intervals streams API.
+            include_polyline: emit downsampled polyline (500m intervals). True for
+                routes.json (used for map rendering). False for activity terrain
+                (raw streams available on demand via pull.py).
         """
         has_elevation = any("ele" in tp for tp in trackpoints)
         
@@ -994,7 +1292,7 @@ class IntervalsSync:
         
         if not has_elevation or total_distance_m < 100:
             return {
-                "source": "gpx_attachment" if has_elevation else "gpx_attachment_no_elevation",
+                "source": source if has_elevation else f"{source}_no_elevation",
                 "total_distance_km": total_distance_km,
                 "total_elevation_m": 0,
                 "elevation_per_km": 0.0,
@@ -1059,32 +1357,150 @@ class IntervalsSync:
         if max_category == "hilly" and course_character in ("flat", "rolling"):
             course_character = "hilly"
         
-        # Downsample trackpoints at 500m intervals for polyline
-        POLYLINE_INTERVAL_M = 500.0
-        polyline = []
-        next_threshold = 0.0
-        for i, tp in enumerate(trackpoints):
-            if cum_dist[i] >= next_threshold or i == 0 or i == len(trackpoints) - 1:
-                km = round(cum_dist[i] / 1000, 1)
-                pt = [km, round(tp["lat"], 5), round(tp["lon"], 5)]
-                if has_elevation:
-                    pt.append(round(smoothed_ele[i]))
-                polyline.append(pt)
-                if i == 0:
-                    next_threshold = POLYLINE_INTERVAL_M
-                else:
-                    next_threshold = cum_dist[i] + POLYLINE_INTERVAL_M
+        # Downsample trackpoints at 500m intervals for polyline (when requested).
+        # Activities skip the polyline since the raw streams are available on demand
+        # via pull.py — saves ~1-3 KB per activity in latest.json.
+        polyline = None
+        if include_polyline:
+            POLYLINE_INTERVAL_M = 500.0
+            polyline = []
+            next_threshold = 0.0
+            for i, tp in enumerate(trackpoints):
+                if cum_dist[i] >= next_threshold or i == 0 or i == len(trackpoints) - 1:
+                    km = round(cum_dist[i] / 1000, 1)
+                    pt = [km, round(tp["lat"], 5), round(tp["lon"], 5)]
+                    if has_elevation:
+                        pt.append(round(smoothed_ele[i]))
+                    polyline.append(pt)
+                    if i == 0:
+                        next_threshold = POLYLINE_INTERVAL_M
+                    else:
+                        next_threshold = cum_dist[i] + POLYLINE_INTERVAL_M
         
-        return {
-            "source": "gpx_attachment",
+        # Start coordinates — first valid trackpoint. Useful for "where did this
+        # ride happen" without needing to read the full polyline.
+        start_coords = [round(trackpoints[0]["lat"], 5), round(trackpoints[0]["lon"], 5)]
+        
+        # Grade distribution + max grade — both derived from the same 200m chunked
+        # walk over smoothed elevation. max_grade_pct captures the steepest
+        # 200m anywhere on the route (including short pitches that don't
+        # form sustained climbs and therefore aren't in climbs[]).
+        grade_distribution, max_grade_pct = self._compute_grade_distribution(cum_dist, smoothed_ele)
+        
+        result = {
+            "source": source,
             "total_distance_km": total_distance_km,
             "total_elevation_m": total_elevation_m,
             "elevation_per_km": elevation_per_km,
             "course_character": course_character,
+            "max_grade_pct": max_grade_pct,
+            "grade_distribution": grade_distribution,
+            "start_coords": start_coords,
             "climbs": climbs,
-            "descents": descents,
-            "polyline": polyline
+            "descents": descents
         }
+        if include_polyline:
+            result["polyline"] = polyline
+        return result
+    
+    def _compute_grade_distribution(self, cum_dist: List[float],
+                                    smoothed_ele: List[float]) -> Tuple[Dict[str, float], float]:
+        """
+        Compute time-in-grade distribution + max absolute grade.
+        
+        Walks the route in 200m chunks. For each chunk, computes the gradient
+        and assigns it to a bucket. Returns (distribution, max_abs_grade_pct).
+        
+        Buckets (absolute gradient — descents and climbs both count toward
+        the same bucket since coaching-relevant grade impact is symmetric):
+            flat:     |grade| < 1%
+            gentle:   1-3%
+            moderate: 3-6%
+            steep:    >= 6%
+        
+        First return value is a dict with keys flat_pct, gentle_pct,
+        moderate_pct, steep_pct (sums to ~100, rounding residual possible).
+        
+        Second return value is the steepest 200m chunk encountered anywhere
+        on the route, NOT just inside detected climbs. This catches short
+        steep pitches on otherwise rolling routes that don't form sustained
+        climbs (and therefore don't appear in the climbs[] array). Coach
+        protocol uses max_grade_pct ≥ 10 as a "surface terrain" trigger;
+        gating that on detected-climb max would miss exactly the rides
+        where a single short kicker mattered.
+        """
+        CHUNK_M = 200.0
+        total_dist = cum_dist[-1] if cum_dist else 0.0
+        if total_dist < CHUNK_M:
+            return ({"flat_pct": 100.0, "gentle_pct": 0.0, "moderate_pct": 0.0, "steep_pct": 0.0}, 0.0)
+        
+        buckets = {"flat": 0.0, "gentle": 0.0, "moderate": 0.0, "steep": 0.0}
+        max_grade = 0.0
+        n = len(cum_dist)
+        i = 0
+        chunk_start_dist = 0.0
+        while i < n - 1:
+            # Advance j until chunk_distance >= CHUNK_M or end of track
+            j = i
+            while j < n - 1 and cum_dist[j] - chunk_start_dist < CHUNK_M:
+                j += 1
+            chunk_dist = cum_dist[j] - chunk_start_dist
+            if chunk_dist <= 0:
+                break
+            ele_change = smoothed_ele[j] - smoothed_ele[i]
+            grade_pct = abs(ele_change / chunk_dist * 100.0)
+            if grade_pct > max_grade:
+                max_grade = grade_pct
+            if grade_pct < 1.0:
+                buckets["flat"] += chunk_dist
+            elif grade_pct < 3.0:
+                buckets["gentle"] += chunk_dist
+            elif grade_pct < 6.0:
+                buckets["moderate"] += chunk_dist
+            else:
+                buckets["steep"] += chunk_dist
+            chunk_start_dist = cum_dist[j]
+            i = j
+        
+        return ({
+            "flat_pct": round(buckets["flat"] / total_dist * 100, 1),
+            "gentle_pct": round(buckets["gentle"] / total_dist * 100, 1),
+            "moderate_pct": round(buckets["moderate"] / total_dist * 100, 1),
+            "steep_pct": round(buckets["steep"] / total_dist * 100, 1),
+        }, round(max_grade, 1))
+    
+    def _streams_to_trackpoints(self, streams: List[Dict]) -> List[Dict]:
+        """
+        Convert Intervals.icu streams response into trackpoint dicts compatible
+        with _analyze_terrain.
+        
+        Intervals stores latlng as a single stream object with two parallel
+        arrays: `data` holds latitudes, `data2` holds longitudes (NOT the Strava
+        paired-array convention). Altitude is its own stream with a `data` array.
+        
+        Skips trackpoints where either lat or lng is None (GPS dropout). Altitude
+        is included when present and non-None at the same index.
+        """
+        latlng_stream = next((s for s in streams if s.get("type") == "latlng"), None)
+        altitude_stream = next((s for s in streams if s.get("type") == "altitude"), None)
+        if not latlng_stream:
+            return []
+        
+        lat_arr = latlng_stream.get("data") or []
+        lng_arr = latlng_stream.get("data2") or []
+        ele_arr = (altitude_stream.get("data") if altitude_stream else None) or []
+        
+        n = min(len(lat_arr), len(lng_arr))
+        trackpoints = []
+        for i in range(n):
+            lat, lng = lat_arr[i], lng_arr[i]
+            if lat is None or lng is None:
+                continue
+            tp = {"lat": float(lat), "lon": float(lng)}
+            if i < len(ele_arr) and ele_arr[i] is not None:
+                tp["ele"] = float(ele_arr[i])
+            trackpoints.append(tp)
+        return trackpoints
     
     def _detect_segments(self, trackpoints: List[Dict], cum_dist: List[float],
                          smoothed_ele: List[float], min_gradient: float,
@@ -1532,6 +1948,15 @@ class IntervalsSync:
         wind_unit = athlete.get("wind_speed") or "MPS"
         speed_unit = "KPH"
         
+        # Normalized unit dict for terrain/weather summary `units` block.
+        # Same source data as temp_unit/wind_unit above, different normalization
+        # (lowercase, with explicit "m/s"/"km/h" rather than MPS/KPH).
+        athlete_units = self._athlete_units_from_dict(athlete)
+        
+        # Load previous latest.json — used as persistent state for terrain &
+        # weather copy-forward. Empty dict on first sync / fresh data dir.
+        previous_latest_lookup = self._load_previous_latest()
+        
         # Extract per-sport-family thesholds from user settings
         sport_settings = self._build_sport_thresholds(athlete)
         
@@ -1931,7 +2356,9 @@ class IntervalsSync:
             "derived_metrics": derived_metrics,
             "recent_activities": self._format_activities(
                 activities_extended, interval_activity_ids,
-                temp_unit=temp_unit, wind_unit=wind_unit, speed_unit=speed_unit
+                temp_unit=temp_unit, wind_unit=wind_unit, speed_unit=speed_unit,
+                previous_latest_lookup=previous_latest_lookup,
+                athlete_units=athlete_units
             ),
             "wellness_data": self._format_wellness(wellness),
             "planned_workouts": formatted_planned_workouts,
@@ -6582,14 +7009,22 @@ class IntervalsSync:
     
     def _format_activities(self, activities: List[Dict], interval_activity_ids: set = None,
                            temp_unit: str = "C", wind_unit: str = "MPS",
-                           speed_unit: str = "KPH") -> List[Dict]:
+                           speed_unit: str = "KPH",
+                           previous_latest_lookup: Optional[Dict[str, Dict]] = None,
+                           athlete_units: Optional[Dict[str, str]] = None) -> List[Dict]:
         """Format activities for LLM analysis.
         
         Unit kwargs default to metric for backward compatibility with any caller
         not yet passing them; collect_training_data passes the athlete's actual
         account preferences (or KPH for speed since sync.py force-converts).
+        
+        previous_latest_lookup and athlete_units are used to populate
+        terrain_summary and weather_summary fields per activity (v3.107).
+        Empty dict / None defaults preserve callers that don't need these.
         """
         interval_activity_ids = interval_activity_ids or set()
+        previous_latest_lookup = previous_latest_lookup or {}
+        athlete_units = athlete_units or {"wind": "m/s", "temp": "c", "rain": "mm"}
         # v3.100: O(1) lookup from intervals.json entries for has_intervals/has_dfa split.
         intervals_by_id = {
             str(e.get("activity_id")): e
@@ -6725,6 +7160,21 @@ class IntervalsSync:
                     activity["has_dfa"] = True
                     if _dfa.get("quality", {}).get("sufficient"):
                         activity["dfa_summary"] = self._build_dfa_summary(_dfa)
+
+            # Terrain summary (v3.107) — fetched on first encounter, copied
+            # forward thereafter via previous_latest_lookup. Indoor activities
+            # produce no terrain field at all (activity.type is the indoor signal).
+            terrain_fields = self._build_terrain_for_activity(act, previous_latest_lookup)
+            for k, v in terrain_fields.items():
+                activity[k] = v
+            
+            # Weather summary (v3.107) — built from existing activity-list fields
+            # when has_weather=True. weather_status="unavailable" otherwise (and
+            # NOT copied forward — re-evaluated each sync since Intervals may
+            # compute weather later).
+            weather_fields = self._build_weather_for_activity(act, previous_latest_lookup, athlete_units)
+            for k, v in weather_fields.items():
+                activity[k] = v
 
             # Pass through full description + extract NOTE: lines for push.py round-trip (v3.84)
             raw_desc = act.get("description") or ""
