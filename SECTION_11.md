@@ -1,10 +1,49 @@
 # Section 11 — AI Coach Protocol
 
-**Protocol Version:** 11.39  
-**Last Updated:** 2026-04-26
+**Protocol Version:** 11.43  
+**Last Updated:** 2026-04-30
 **License:** [MIT](https://opensource.org/licenses/MIT)
 
 ### Changelog
+
+**v11.43 — Body Weight Handling (block W/kg + weekly trend):**
+- New `current_status.weight` block in `latest.json` carrying gated weight signals: `weight_latest_kg`, `weight_latest_date`, `wkg_current`, `wkg_ftp_source` (+ optional `ftp_setting_date`), `wkg_block_start` / `wkg_block_end` / `wkg_block_delta`, `weight_7d_avg_kg`, `weight_28d_slope_kg_per_week`, plus `display.{weight_latest, weight_7d_avg, weight_28d_slope_per_week}` ({value, unit} pairs in the athlete's preferred weight unit). Each field emits only when its data-density gate is satisfied; failed-gate fields are absent from the JSON, and the AI layer omits the corresponding report section silently with no "insufficient data" boilerplate
+- FTP source: tested cycling FTP from `sportSettings` preferred, eFTP fallback. eFTP is not suppressed when the underlying tested FTP is stale — the source tag plus `ftp_setting_date` carry the staleness signal. `ftp_setting_date` reflects the FTP setting change recorded in `ftp_history.json`; Intervals does not expose a formal test-event date
+- Block trajectory uses the trailing 28d as a v1 block-window proxy (the protocol does not yet track explicit block boundaries). Boundary gates: first 4 days of window for start, last 4 days for end — symmetric and fully covered by the standard wellness fetch. Both endpoints use the *current* FTP, so `wkg_block_delta` reflects weight change across the window, not FTP change
+- Display Unit Semantics: narrated weights ship via `display.*` per the protocol-wide rule; W/kg stays unit-universal. New row added to the §Display Unit Semantics sites table for `current_status.weight`
+- Block report: new "Body Weight & W/kg" section (current W/kg headline + optional block trajectory subsection)
+- Weekly report: new conditional "Weight Trend" section, dormant on low density (e.g. <4 weigh-ins in trailing 7d)
+- Pre-workout and post-workout report templates intentionally untouched in v1
+- Deliberately deferred: target weight/date/rate config, hunger / cravings fields, daily-swing triggers, indoor / outdoor split, hydration correction, "fueling protected" inference. See the new Body Weight Handling section for the v1 boundary
+- Pairs with `sync.py` v3.112
+
+**v11.42 — Season Report v2 prerequisites land:**
+- Two items parked in v11.41 now ship via `sync.py` v3.110: weekly capability rollup on `weekly_180d[*]` (durability/EF/HRRc means + qualifying counts) and monthly `dominant_phase` alignment with `_detect_phase_v2` via modal aggregation of overlapping weekly rows
+- Schema tables for `weekly_180d` and `monthly_*y` rows added to the History Data Mirror section
+- `or`-chain → is-None cleanup at four extraction sites (`_calculate_durability` decoupling fallback, `_calculate_hrrc_trend` qualifying filter, weekly capability rollup HRRc dict-extract, activity formatter `raw_hrrc`) — exact-zero values are now treated as authoritative rather than falling through to a sibling key
+- `examples/reports/SEASON_REPORT_TEMPLATE.md` Notes section: phase bullet and capability bullet rewritten to describe shipped v3.110 behavior
+- Pairs with `sync.py` v3.110
+
+**v11.41 — Season Report Tier:**
+- New report tier above Block: trailing-12-month annual arc with current-season trajectory and year-over-year metrics comparison. Length norm 55–70 lines, on-demand only (no automatic cadence). Sits at the top of the existing Pre → Post → Weekly → Block hierarchy
+- v1 is descriptive only. Goal audit is intentionally deferred to v2 — no placeholder section, no header
+- Phase narrative is scoped to ≤180d. All phase references draw from `weekly_180d[*].phase_detected` or `derived_metrics.phase_detection`. The YoY section is **metrics-only**: no phase labels for prior years. `monthly_*y[*].dominant_phase` is derived via modal aggregation of `weekly_180d[*].phase_detected` values whose week span overlaps the month; TSS is used only as tie-break — same vocabulary as `_detect_phase_v2`. Null when no overlapping weekly rows exist (month outside the 180d window)
+- Capability metrics (durability, EF, HRRc) are available per week in `weekly_180d[*]` as trajectory fields (v3.110). Each week carries `durability_mean`, `durability_qualifying`, `ef_mean`, `ef_qualifying`, `hrrc_mean`, `hrrc_qualifying`. Gating mirrors `derived_metrics.capability` (VI≤1.05, VI>0, mt≥5400 for durability; cycling types + VI≤1.05 + mt≥1200 for EF; icu_hrr>0 for HRRc). N≥1 emits a mean; qualifying count governs render confidence. Sustainability and DFA a1 remain present-moment only in `derived_metrics.capability`
+- YoY rule: match by calendar `month` string across the union of `monthly_1y`, `monthly_2y`, `monthly_3y` (these are rolling-trailing arrays, not year-bucketed). If matched month not present, render `n/a — no prior data`. Default is current-vs-last-year only; 2y/3y lines surface only when delta is material (≥15% hours/TSS, ≥3 CTL points, ≥5pp TID)
+- Span: trailing 12 months ending at `metadata.last_updated` (or `history.generated_at` when reading `history.json` directly)
+- No `sync.py` changes needed for Season Report v1. Report consumes existing JSON only. Pairs with `sync.py` v3.110
+- New files: `examples/reports/SEASON_REPORT_TEMPLATE.md`, `examples/reports/SEASON_REPORT_EXAMPLES.md`. Updated: `examples/reports/REPORT_HIERARCHY.md` (table, flow diagram, capability scaling rule, files list)
+
+**v11.40 — Display Unit Semantics:**
+- New "Display Unit Semantics" subsection in the Data Mirror block. Establishes a three-layer signal: (1) `athlete_profile.display_preferences` — six-key map of athlete's Intervals.icu unit choices, (2) per-record `display.*` blocks with display-ready `{value, unit}` pairs converted from canonical metric, (3) per-activity `*_unit` siblings + `weather_summary.units` for fields the API already returns in account units (left as-is for backward compatibility)
+- AI rules: quote `display.*` for any user-facing prose involving distance / elevation / weight / height / position / speed; use canonical metric (`*_km`, `*_m`, `*_kg`) for calculations only; cross-record arithmetic stays in canonical and display-converts the result at narration; W/kg / kJ / IF / % / heat-protocol °C calibration are universal physics units, pref-independent
+- Sustainability profile `weight_kg` deliberately stays canonical-only (calculation input for W/kg, never narrated as a weight value)
+- Heat-protocol °C thresholds are canonical scientific units. AI quotes them as °C regardless of athlete preference; no inline °C → °F conversion at narration time. Future sync.py may emit a display-converted threshold block; until then, °C is the reference
+- Resolves the `avg_speed_unit`/`max_speed_unit` always-KPH asymmetry documented earlier — narration now reads from `display.avg_speed`/`display.max_speed` which honor the athlete's distance preference; the original sibling fields remain for backward compatibility
+- Pairs with `sync.py` v3.110. Sites: `athlete_profile.display.height`, `current_status.current_metrics.display.weight`, `recent_activities[].display.{distance, elevation, avg_speed, max_speed}`, `terrain_summary.display.{total_distance, total_elevation, elevation_per_distance}` + `climbs[]/descents[].display.{position, distance, elevation}` (recent_activities and routes.json), `summary.by_activity_type[].display.distance`, `wellness_data[].display.weight`, history.json `daily_90d/weekly_180d[].display.weight`, `monthly_*y[].display.avg_weight` (aggregate naming preserved), `race_calendar.all_races[].display.distance`
+- All display sub-objects use a single nested shape (`display.*`) — no `*_display` sibling form. One AI rule, one schema shape across every emission site
+- Pre-workout report Weather line de-metric'd: hardcoded `°C` and `m/s` labels replaced by `weather_summary.units.{temp, wind}` references so imperial athletes see °F and MPH/MPS/KPH per their account
+- Templates updated with directive line + de-metric'd placeholders. Examples remain metric (Daniel's account is metric); imperial coverage relies on per-pref display blocks rather than parallel example sets
 
 **v11.39 — Outdoor Context Synthesis Line:**
 - New `Outdoor context:` line at the top of each outdoor activity block in post-workout reports. Single optional line synthesizing terrain + weather and, when earned, a causal clause attributing observed variability or environmental cost
@@ -321,19 +360,91 @@ These fields are informational context for AI coaching. They do NOT enter readin
 
 - `avg_temp_unit`: `"C"` or `"F"` — reflects athlete's Intervals.icu account temperature setting; the API returns `avg_temp` in this unit.
 - `wind_speed_unit`: `"MPS"`, `"KPH"`, or `"MPH"` — reflects athlete's account wind setting; the API returns `wind_speed` in this unit.
-- `avg_speed_unit` / `max_speed_unit`: always `"KPH"` — sync.py converts m/s → km/h unconditionally regardless of athlete preference. Surfacing the label makes this asymmetry visible.
+- `avg_speed_unit` / `max_speed_unit`: always `"KPH"` — sync.py converts m/s → km/h unconditionally regardless of athlete preference. The new `display.avg_speed`/`display.max_speed` blocks (see *Display Unit Semantics* below) resolve the user-facing asymmetry; these labels are retained for backward compatibility.
+
+#### Display Unit Semantics
+
+**Purpose.** Many narrative-bearing fields ship in canonical metric units (km, m, kg, m/h-as-km/h, m/km) regardless of the athlete's Intervals.icu unit preferences. This is by design — calculations use stable units. Narration is a separate concern: the AI must quote values in the athlete's preferred system without doing the conversion itself. sync.py emits a parallel `display` sub-object alongside every canonical metric field, with the conversion already applied.
+
+**Three-layer signal:**
+
+1. **`athlete_profile.display_preferences`** — six-key map of the athlete's Intervals.icu choices: `wind`, `temp`, `rain`, `distance`, `weight`, `height`. Confirms which units to expect across the rest of the data. Athlete-wide intent.
+2. **Per-record `display.*` blocks** — `{value: <converted>, unit: <display code>}` sub-objects sitting next to canonical metric fields. The unit code is the display-layer code (`km`/`mi`, `m`/`ft`, `kg`/`lb`, `cm`/`in`, `km/h`/`mph`, `m/km`/`ft/mi`).
+3. **Per-activity `*_unit` siblings + `weather_summary.units`** — for fields the Intervals API already returns in the athlete's account units (`avg_temp`, `wind_speed`, weather summary values). These existed before display blocks and remain untouched. The label tells you the unit; the value is already in that unit.
+
+**AI rules:**
+
+- **Quote `display.*` for any user-facing prose involving distance, elevation, weight, height, position, or speed.** This is the single source of truth for narration in those dimensions. If you write "76.42 km" when the athlete's preference is imperial, you've ignored a value sitting one field over.
+- **Use canonical metric fields (`*_km`, `*_m`, `*_kg`) for calculations only — never quote them in narrative.** They are stable inputs to math, not display strings.
+- **Cross-record arithmetic stays in canonical units.** Sum `distance_km` across activities → canonical total. Display-convert that single result at narration. Do not sum `display.distance.value` across records (the unit may already be imperial; you'd report a meaningless number to a metric athlete after re-conversion). `summary.by_activity_type[].distance_km` is built this way: the running canonical sum is what's stored; the row's `display.distance` is the converted snapshot of that sum.
+- **Universal physics units are pref-independent and stay as-is.** W/kg, kJ, IF, %, kJ/kg, ml/kg/min — these are scientific units, not display choices.
+- **Heat-protocol °C thresholds are canonical scientific units, not pref-dependent.** The Environmental Conditions Protocol's tier thresholds (15°C floor, 38°C ceiling, +5/+8/+12°C deltas) are physical-science calibrations from the literature — same status as W/kg, IF, or PI. Quote thresholds as °C in narrative regardless of athlete preference. Do not display-convert °C → °F inline at narration time; that violates the "AI does not convert" rule. If a future sync.py revision precomputes a display-converted threshold value into the data layer, narrate from that block; until then, °C stands as the canonical reference. The athlete's reported temperature value (`avg_temp` etc.) is already returned by Intervals.icu in the athlete's account unit and labelled via `weather_summary.units.temp` / `avg_temp_unit` — that path is unchanged.
+- **Sustainability profile `weight_kg` is canonical-only by design.** It is a calculation input for W/kg in the sustainability anchors block, not a user-facing weight value. The W/kg result is itself unit-universal, so no display block is needed there.
+
+**Where display blocks ship:**
+
+| Surface | Canonical fields | Display fields |
+|---|---|---|
+| `athlete_profile` | `height_m` | `display.height` + `display_preferences` (six-key map) |
+| `current_status.current_metrics` | `weight_kg` | `display.weight` |
+| `current_status.weight` | `weight_latest_kg`, `weight_7d_avg_kg`, `weight_28d_slope_kg_per_week` | `display.{weight_latest, weight_7d_avg, weight_28d_slope_per_week}` (W/kg fields stay unit-universal — no display block on `wkg_*`) |
+| `recent_activities[]` | `distance_km`, `elevation_m`, `avg_speed`, `max_speed` | `display.{distance, elevation, avg_speed, max_speed}` |
+| `recent_activities[].terrain_summary` + `routes.json` events | `total_distance_km`, `total_elevation_m`, `elevation_per_km`; `climbs[]`/`descents[]` `position_km`, `distance_km`, `elevation_m` (signed for descents) | `display.{total_distance, total_elevation, elevation_per_distance}` on container; `display.{position, distance, elevation}` on each climb/descent |
+| `summary.by_activity_type[]` | `distance_km` | `display.distance` |
+| `wellness_data[]` | `weight_kg` | `display.weight` |
+| `history.json daily_90d[]`, `weekly_180d[]` | `weight_kg` | `display.weight` |
+| `history.json monthly_1y/2y/3y[]` | `avg_weight_kg` | `display.avg_weight` |
+| `race_calendar.all_races[]` | `distance_meters` | `display.distance` (already in km/mi units, not m/ft) |
+
+**Cache behavior:** Terrain summaries copied forward from a previous sync (recent_activities terrain copy-forward and the routes.json attachment-id cache) refresh their display blocks against current preferences each sync. A change to the athlete's Intervals.icu unit preference picks up on the next sync without invalidating the (expensive) GPX/streams analysis cache; the canonical metric fields are preserved verbatim.
+
+**Null handling:** `display` sub-objects may be `null` when the corresponding canonical value is `null` (e.g., a wellness row with no weight reported produces `weight_kg: null` and `display.weight: null`). The AI treats `null` display blocks identically to null canonical fields — surface "no data" rather than guessing.
 
 #### History Data Mirror (history.json)
 
 In addition to the real-time `latest.json` mirror, athletes may provide a `history.json` file containing longitudinal training data with tiered granularity:
 
 - **90-day tier:** Daily resolution (date, hours, TSS, CTL/ATL/TSB, HRV, RHR, zone distribution, weight)
-- **180-day tier:** Weekly aggregates (hours, TSS, CTL/ATL/TSB, zones, hard days, longest ride)
+- **180-day tier:** Weekly aggregates (hours, TSS, CTL/ATL/TSB, zones, hard days, longest ride, phase; capability rollup: `durability_mean`/`_qualifying`, `ef_mean`/`_qualifying`, `hrrc_mean`/`_qualifying`)
 - **1/2/3-year tiers:** Monthly aggregates (hours, TSS, CTL range, zones, phase, data completeness)
 - **FTP timeline:** Every FTP change with date and type (indoor/outdoor)
 - **Data gaps:** Periods with missing or low data, flagged factually without inference
 
 `history.json` is auto-generated by sync.py when missing or stale (>28 days), pulling fresh from the Intervals.icu API.
+
+**weekly_180d row fields (v3.110):**
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `week_start` | string | ISO date of the Monday (or configured week-start day) |
+| `total_hours` | number | Total moving time for the week |
+| `total_tss` | number | Sum of training load across all activities |
+| `ctl_end` / `atl_end` / `tsb_end` | number/null | CTL, ATL, TSB at week end (from wellness) |
+| `z1_z2_pct` / `z3_pct` / `z4_plus_pct` | number/null | Zone distribution (% of total zone time) |
+| `hard_days` | number | Count of days classified as hard |
+| `acwr` | number/null | Acute:chronic workload ratio (null for first 3 weeks) |
+| `phase_detected` | string/null | Phase label from `_detect_phase_v2` backfill (Build/Base/Peak/Taper/Deload/Recovery/Overreached/null) |
+| `durability_mean` | number/null | Mean cardiac decoupling (%) across qualifying sessions. Null when N=0. Gate: VI≤1.05, VI>0, mt≥5400, decoupling not None |
+| `durability_qualifying` | number | Count of sessions meeting the durability gate (always present, 0 if none) |
+| `ef_mean` | number/null | Mean Efficiency Factor across qualifying cycling sessions. Null when N=0. Gate: cycling types, VI≤1.05, VI>0, mt≥1200, EF not None |
+| `ef_qualifying` | number | Count of sessions meeting the EF gate (always present) |
+| `hrrc_mean` | number/null | Mean HRRc (bpm, 60s HR drop) across qualifying sessions. Null when N=0. Gate: icu_hrr not None and >0 |
+| `hrrc_qualifying` | number | Count of sessions meeting the HRRc gate (always present) |
+
+N≥1 emits a mean for all three capability fields. Use `*_qualifying` to calibrate confidence — a single-session mean is a real observation, not an estimate. Alert-layer gates (N≥2/5 for durability, N≥3 for HRRc) remain in `derived_metrics.capability` only.
+
+**monthly_*y row fields (v3.110):**
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `month` | string | `YYYY-MM` |
+| `total_hours` / `total_tss` / `activity_count` | number | Monthly totals |
+| `ctl_peak` / `ctl_low` / `ctl_end` | number/null | CTL range and end-of-month value |
+| `z1_z2_pct` / `z3_pct` / `z4_plus_pct` | number/null | Zone distribution (% of total zone time) |
+| `hard_days_avg_per_week` | number | Hard days per week averaged over the month |
+| `avg_hrv` / `avg_rhr` / `avg_weight_kg` | number/null | Monthly wellness averages |
+| `dominant_phase` | string/null | Modal phase label derived from overlapping `weekly_180d[].phase_detected` rows. Most-frequent label wins; TSS is tie-break only. Null when no weekly rows overlap the month (month outside 180d window). Same vocabulary as `_detect_phase_v2` |
+| `days_with_data` | number | Days in month with at least one activity or wellness record |
 
 #### Interval Data Mirror (intervals.json)
 
@@ -1193,6 +1304,52 @@ The following thresholds apply to wellness-level Feel. If Feel is present in the
 
 **Integration:**
 Daily metrics synchronised through data hierarchy and mirrored in JSON dataset each morning. AI-coach systems must reference latest values before prescribing or validating any session.
+
+---
+
+### Body Weight Handling
+
+**Purpose:** Surface body weight as a training signal in block reports (W/kg headline) and weekly reports (trend). Gated by data density. No daily noise.
+
+**Architecture:** All weight metrics surfaced in reports are computed in `sync.py` and live under `current_status.weight` in `latest.json`. The AI layer interprets only — no slope, delta, or W/kg arithmetic against raw `wellness_data[]` or `daily_90d` / `weekly_180d` weight values for the report fields below. A field's absence from the JSON is the explicit signal that its data-density gate failed; the AI omits the corresponding report section silently — no "insufficient data" boilerplate.
+
+**Fields:**
+
+| Field | Meaning | Gate |
+|-------|---------|------|
+| `weight_latest_kg` | Most recent weigh-in value (kg) | Latest entry age ≤ 14 days |
+| `weight_latest_date` | ISO date of that entry | (same gate) |
+| `wkg_current` | FTP / `weight_latest_kg` | `weight_latest_kg` present + FTP source available |
+| `wkg_ftp_source` | `"tested"` or `"eftp"` | (same gate as `wkg_current`) |
+| `ftp_setting_date` | ISO date of the FTP setting change recorded in `ftp_history.json` (Intervals does not expose a formal test date) | `wkg_ftp_source == "tested"` |
+| `wkg_block_start` | W/kg at start of the trailing 28d window | ≥ 1 weigh-in within the **first 4 days** of the window (days `[today-27, today-24]`) |
+| `wkg_block_end` | W/kg at the end of the trailing 28d window (today) | ≥ 1 weigh-in within the **last 4 days** of the window (days `[today-3, today]`) |
+| `wkg_block_delta` | `wkg_block_end − wkg_block_start` | Both endpoints satisfied |
+| `weight_7d_avg_kg` | Mean weigh-in across trailing 7d (kg) | ≥ 4 weigh-ins in trailing 7d |
+| `weight_28d_slope_kg_per_week` | Linear regression slope across trailing 28d, expressed as kg/week | ≥ 14 weigh-ins in trailing 28d |
+| `display.weight_latest` | `{value, unit}` pair for `weight_latest_kg` in the athlete's preferred weight unit | (mirrors `weight_latest_kg`) |
+| `display.weight_7d_avg` | `{value, unit}` pair for `weight_7d_avg_kg` in the athlete's preferred weight unit | (mirrors `weight_7d_avg_kg`) |
+| `display.weight_28d_slope_per_week` | `{value, unit}` pair for `weight_28d_slope_kg_per_week`; unit code suffixed with `/week` (e.g. `"kg/week"` / `"lb/week"`); value rounded to 3 decimal places | (mirrors `weight_28d_slope_kg_per_week`) |
+
+**FTP source preference:** Tested cycling FTP from `sportSettings` is used when present; eFTP is the fallback. The source tag (`wkg_ftp_source`) plus `ftp_setting_date` carry the staleness signal — eFTP is *not* suppressed when the underlying tested FTP is old. The `ftp_setting_date` reflects the most recent FTP setting change recorded in `ftp_history.json`; Intervals.icu does not expose a formal test-event date, so the field is named for what it represents. The block report narration must surface the source inline (e.g., "based on tested FTP set 2026-03-12" vs "based on eFTP").
+
+**Display fields (per Display Unit Semantics):** Narrated weight values must come from the `display.*` block — never from the canonical `*_kg` fields. W/kg numbers stay unit-universal (no display block on `wkg_*` fields), consistent with the protocol-wide rule that W/kg, IF, kJ, and percentage values do not pref-convert. The 28d slope display is built with 3dp precision (vs the 1dp default for absolute weights) and emits a unit code suffixed with `/week`.
+
+**Block window — v1 proxy:** The trajectory window is the trailing 28 days. This is a deliberate v1 simplification — Section 11 does not yet track explicit block-boundary markers. Boundary gates use the **first 4 days** of the window (days `[today-27, today-24]`) for `wkg_block_start` and the **last 4 days** (days `[today-3, today]`) for `wkg_block_end` — symmetric, self-contained, and fully covered by the standard wellness fetch (no extra API days needed). Both endpoints divide the *current* FTP by the boundary weight, so `wkg_block_delta` reflects weight change across the window — not FTP change. When proper block-boundary tracking ships, this field set will be revisited.
+
+**Tone constraint (weight-specific):** Weight reporting must use functional language — "compatible with training load," "W/kg trajectory," "trend." It must avoid moral framing — no "good week / bad week," no praise or disappointment. This rule is specific to weight; HRV, CTL, and power signals do not carry the same risk and remain governed by their existing protocols.
+
+**Deliberately deferred / out of scope for v1:**
+
+- **Target weight / date / rate config.** "On/off track toward target" requires athlete-supplied target weight, target date, and acceptable rate (typically ≤0.5–1% bodyweight/week for trained athletes). None exist as config inputs today; until they do, any pace claim would be invented.
+- **Hunger / cravings fields.** Not present in the standard Intervals.icu wellness schema and not currently logged in custom fields. Referencing them would promise a signal we don't have.
+- **Daily-swing triggers** (e.g., "weight dropped 1 kg overnight"). Single-day weigh-in deltas are dominated by hydration and gut content; flagging them would contradict the trend-not-weigh-in rule.
+- **Indoor / outdoor split** of weight signals. Per-environment sample size is too low to support a clean split today. Re-evaluate once trailing windows fill — `indoor` flagging on activities is already captured per session, so the data exists for a future split.
+- **Hydration correction** of weight readings. Out of scope for v1.
+- **"Fueling protected" inference.** `sync.py` carries no intake data; any such claim would be inferential from HRV / RPE / power / decoupling and risks moralising the weight section.
+- **Pre-workout and post-workout weight sections.** Intentionally untouched. Weight belongs in retrospective views (block, weekly), not in same-day decision making at the v1 maturity.
+
+These deferrals live in this section rather than `SECTION_11_TODO.md` to keep the v1 boundary cohesive with the feature spec; they can be revisited once the underlying data foundations or athlete-supplied config land.
 
 ---
 
@@ -2559,6 +2716,15 @@ See `PRE_WORKOUT_REPORT_TEMPLATE.md` in the examples directory for conditional f
 - Tomorrow preview (when planned session exists)
 
 See `POST_WORKOUT_REPORT_TEMPLATE.md` in the examples directory for field reference and rounding conventions.
+
+**Season Reports (on-demand only) must include:**
+- Annual position (current phase, previous phase, 180d phase trajectory, seasonal-table reference)
+- Current season trajectory (180d): volume, CTL peak/current, ACWR week-bucket counts, TID 180d, hard-day density with first-half vs second-half drift, longest ride / longest week, quality session count
+- Year-over-year comparison (calendar-month matched, metrics-only — no phase claims about prior years)
+- Notable patterns (FTP timeline events, data gaps, A-races completed/upcoming, one deviations line)
+- Interpretation (2-4 sentences)
+
+See `SEASON_REPORT_TEMPLATE.md` in the examples directory for the full structure and the YoY material-threshold logic. Phase narrative is scoped to ≤180d by design — see template Notes for rationale.
 
 **Brevity Rule:** Brief when metrics are normal. Detailed when thresholds are breached or athlete asks "why."
 
