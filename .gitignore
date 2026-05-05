@@ -1,8 +1,38 @@
+# Environment variables — NEVER commit these
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
 # Data files — synced by workflow, don't need in git history
 # (comment out if you want data versioned in the repo)
 data/
 .xlsx
 
+# Local reports — generated locally, reports/ in repo is for workflow output
+reports/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Test files
+test_gemini.py
+test_ollama.py
 .DS_Store
 latest.json
 interval.json
