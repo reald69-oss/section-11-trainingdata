@@ -1231,7 +1231,7 @@ class IntervalsSync:
         return summary
 
     
-    def _generate_intervals(self, activities: List[Dict]) -> set:
+    def _generate_intervals(self, activities: List[Dict], present_activity_ids: set = None) -> set:
         """
         Generate intervals.json with incremental caching.
         
@@ -1239,6 +1239,13 @@ class IntervalsSync:
         Subsequent runs: scans recent activities (72h) for new sessions only.
         Fetches per-interval data for new qualifying activities, merges
         with cached data, and purges entries older than 14 days.
+
+        v3.113: callers pass the 28d extended activity set as `activities` so the
+        first-run backfill genuinely reaches the full 14d retention window (the old
+        7d display set silently truncated it). `present_activity_ids` (stringified
+        ids from that extended fetch) is used to prune cached entries whose activity
+        no longer exists — deleted/re-uploaded rides that previously lingered until
+        they aged out and could win the latest_session pointer.
 
         DFA a1 (v3.99): for each new qualifying activity, also fetches streams
         (dfa_a1, artifacts, heartrate, watts) and computes a per-session dfa block.
@@ -1385,7 +1392,19 @@ class IntervalsSync:
             print(f"    ✅ Fetched intervals for {len(new_entries)} new activit{'y' if len(new_entries) == 1 else 'ies'}")
         
         # Merge: keep cached entries within retention window + new entries
-        retained = [a for a in cached.get("activities", []) if a.get("date", "") >= retention_cutoff]
+        # Merge: keep cached entries within retention window, then (v3.113) drop any whose
+        # activity_id is no longer in the current fetched set. present_activity_ids comes from
+        # the 28d extended fetch, which fully covers the 14d retention window, so absence means
+        # the activity was deleted. Stringified compare guards int/str id mismatch. The
+        # `is None` guard preserves prior behaviour if a caller omits the set.
+        cached_within = [a for a in cached.get("activities", []) if a.get("date", "") >= retention_cutoff]
+        if present_activity_ids is None:
+            retained = cached_within
+        else:
+            retained = [a for a in cached_within if str(a.get("activity_id")) in present_activity_ids]
+            pruned = len(cached_within) - len(retained)
+            if pruned and self.debug:
+                print(f"    🧹 Pruned {pruned} stale cached interval/DFA entr{'y' if pruned == 1 else 'ies'} (activity no longer present)")
         all_entries = retained + new_entries
         
         # Build intervals.json
@@ -2600,7 +2619,11 @@ class IntervalsSync:
         # MUST run before _calculate_derived_metrics so self._intervals_data is
         # populated when _calculate_dfa_a1_profile reads it (v3.99 fix).
         print("Checking for interval data...")
-        interval_activity_ids = self._generate_intervals(activities_display)
+        # v3.113: pass the 28d extended set (not the 7d display set) so first-run backfill
+        # reaches the full 14d retention window, and supply the present-ID set for stale-entry
+        # pruning. Scan cutoff inside _generate_intervals still limits what actually gets fetched.
+        present_ids = {str(a.get("id")) for a in activities_extended if a.get("id")}
+        interval_activity_ids = self._generate_intervals(activities_extended, present_activity_ids=present_ids)
         if interval_activity_ids:
             print(f"  📊 {len(interval_activity_ids)} activit{'y' if len(interval_activity_ids) == 1 else 'ies'} with interval data")
         
@@ -7900,6 +7923,7 @@ class IntervalsSync:
                 "type": act.get("type", "Unknown"),
                 "name": activity_name,
                 "duration_hours": round((act.get("moving_time") or 0) / 3600, 2),
+                "duration_formatted": self._format_duration(int(act.get("moving_time") or 0)),
                 "distance_km": distance_km,
                 "tss": act.get("icu_training_load"),
                 "intensity_factor": act.get("icu_intensity"),
