@@ -4,6 +4,19 @@ Intervals.icu → GitHub/Local JSON Export
 Exports training data for LLM access.
 Supports both automated GitHub sync and manual local export.
 
+Version 3.117 - P1 readiness alarm_refs per-branch attribution: the P1 skip return listed
+  every tier1_persistent ref whenever any P1 reason fired, so an ACWR- or TSB-triggered skip
+  with RI >= 0.7 (persistent branch inactive) and unrelated persistent alerts present could
+  name refs that did not trigger the decision. alarm_refs is now built per firing branch -
+  ACWR contributes the acwr alert ref only if that object is present (guaranteed at >=1.5,
+  which exceeds the >=1.35 alert threshold); the TSB+HRV composite contributes none (no
+  discrete alert object to resolve to, per the alerts[] schema); the RI<0.7 persistent branch
+  contributes its tier-1 metrics only when it fires. Matches the shipped v11.47 alarm_refs
+  contract ("names that triggered P0/P1, each resolving to an alerts[] object"), so doc body
+  unchanged. Also: tier1_persistent persistence_days test switched from (x or 0) >= 2 to an
+  explicit None check (behavior identical). P0 already clean; P2/P3/modify return []. Output
+  change in the edge case only. SECTION_11.md v11.49 records the release (changelog-only).
+
 Version 3.116 - P1 readiness-skip severity gate (Commit B of the alert-tier cycle): the P1
   "persistent tier-1 alert" skip branch now requires severity in ("warning", "alarm"), not
   tier alone. Inert on current data - the only tier-1 info alerts (race_taper, race_week)
@@ -305,7 +318,7 @@ class IntervalsSync:
     HISTORY_FILE = "history.json"
     UPSTREAM_REPO = "CrankAddict/section-11"
     CHANGELOG_FILE = "changelog.json"
-    VERSION = "3.116"
+    VERSION = "3.117"
     INTERVALS_FILE = "intervals.json"
     ROUTES_FILE = "routes.json"
 
@@ -6578,19 +6591,24 @@ class IntervalsSync:
         # --- P1: Acute overload ---
         p1_skip_reasons = []
         p1_modify_reasons = []
+        p1_alarm_refs = []
         
         if acwr is not None and acwr >= 1.5:
             p1_skip_reasons.append(f"ACWR {acwr} >= 1.5")
+            # acwr tier-2 alert object always exists here (fires >=1.35; skip >=1.5); ref only if present
+            p1_alarm_refs.extend(a["metric"] for a in alerts if a.get("metric") == "acwr")
         
         # Compound: deep TSB + HRV confirming
         if tsb is not None and tsb < -30 and hrv_delta_pct is not None and hrv_delta_pct < -10:
             p1_skip_reasons.append(f"TSB {tsb} < -30 with HRV {hrv_delta_pct}% below baseline")
+            # no discrete alert object for the TSB+HRV composite -> no alarm_ref (schema requires refs resolve to alerts[])
         
         # RI < 0.7 + persistent tier-1 alerts
-        tier1_persistent = [a for a in alerts if a.get("tier") == 1 and a.get("severity") in ("warning", "alarm") and (a.get("persistence_days") or 0) >= 2]
+        tier1_persistent = [a for a in alerts if a.get("tier") == 1 and a.get("severity") in ("warning", "alarm") and a.get("persistence_days") is not None and a.get("persistence_days") >= 2]
         if ri is not None and ri < 0.7 and tier1_persistent:
             persistent_metrics = [a["metric"] for a in tier1_persistent]
             p1_skip_reasons.append(f"RI {ri} < 0.7 with persistent alerts: {', '.join(persistent_metrics)}")
+            p1_alarm_refs.extend(persistent_metrics)
         
         if p1_skip_reasons:
             return {
@@ -6607,7 +6625,7 @@ class IntervalsSync:
                 "race_week_defers": False,
                 "modification": None,
                 "reason": f"P1 acute overload. {'; '.join(p1_skip_reasons)}.",
-                "alarm_refs": [a["metric"] for a in tier1_persistent]
+                "alarm_refs": p1_alarm_refs
             }
         
         # P1 modify tier (sub-skip thresholds)
